@@ -1922,6 +1922,57 @@ exit 0' >$RCLOCAL
 	}
 
 	fun_openssh() {
+		# Tikrinamas prievadas prieš bet kokį SSH konfigūracijos pakeitimą.
+		ssh_port_valid() {
+			[[ "$1" =~ ^[0-9]{1,5}$ ]] || return 1
+			local port_num=$((10#$1))
+			(( port_num >= 1 && port_num <= 65535 ))
+		}
+
+		ssh_config_backup() {
+			local cfg="/etc/ssh/sshd_config"
+			[[ -f "$cfg" && ! -L "$cfg" ]] || {
+				echo "KLAIDA: sshd_config neegzistuoja arba yra simbolinė nuoroda."
+				return 1
+			}
+			SSHPLUS_SSH_BACKUP="${cfg}.sshplus-backup.$(date +%Y%m%d%H%M%S).$$"
+			cp -p -- "$cfg" "$SSHPLUS_SSH_BACKUP" || {
+				echo "KLAIDA: nepavyko sukurti SSH konfigūracijos kopijos."
+				return 1
+			}
+			chmod 600 "$SSHPLUS_SSH_BACKUP" 2>/dev/null || true
+			echo "Atsarginė kopija: $SSHPLUS_SSH_BACKUP"
+		}
+
+		ssh_config_reload() {
+			if command -v systemctl >/dev/null 2>&1; then
+				systemctl reload ssh 2>/dev/null && return 0
+				systemctl reload sshd 2>/dev/null && return 0
+			fi
+			service ssh reload 2>/dev/null
+		}
+
+		ssh_config_validate_or_restore() {
+			local cfg="/etc/ssh/sshd_config"
+			if /usr/sbin/sshd -t -f "$cfg"; then
+				return 0
+			fi
+			echo "KLAIDA: SSH konfigūracijos patikra nepraėjo. Grąžinama kopija."
+			if [[ -n "${SSHPLUS_SSH_BACKUP:-}" && -f "$SSHPLUS_SSH_BACKUP" ]]; then
+				cp -p -- "$SSHPLUS_SSH_BACKUP" "$cfg" || {
+					echo "KRITINĖ KLAIDA: nepavyko automatiškai atkurti kopijos: $SSHPLUS_SSH_BACKUP"
+					return 2
+				}
+				if /usr/sbin/sshd -t -f "$cfg"; then
+					echo "Pradinė konfigūracija atkurta."
+				else
+					echo "KRITINĖ KLAIDA: ir atkurta konfigūracija nepraeina sshd -t."
+					return 2
+				fi
+			fi
+			return 1
+		}
+
 		clear
 		echo -e "\E[44;1;37m            OPENSSH VALDYMAS             \E[0m\n"
 		echo -e "\033[1;31m[\033[1;36m1\033[1;31m] \033[1;37m• \033[1;33mPRIDETI PORTA\033[1;31m
@@ -1929,62 +1980,166 @@ exit 0' >$RCLOCAL
 [\033[1;36m3\033[1;31m] \033[1;37m• \033[1;33mGRIZTI\033[0m"
 		echo ""
 		echo -ne "\033[1;32mKA NORITE DARYTI \033[1;33m?\033[1;37m "
-		read resp
-		if [[ "$resp" = '1' ]]; then
+		read -r resp
+
+		if [[ "$resp" == '1' ]]; then
 			clear
 			echo -e "\E[44;1;37m         PRIDEDAMAS SSH PORTAS         \E[0m\n"
 			echo -ne "\033[1;32mKURI PORTA NORITE PRIDETI \033[1;33m?\033[1;37m "
-			read pt
-			[[ -z "$pt" ]] && {
-				echo -e "\n\033[1;31mBlogas portas!"
+			read -r pt
+
+			if ! ssh_port_valid "$pt"; then
+				echo -e "\n\033[1;31mBlogas portas! Įveskite skaičių nuo 1 iki 65535.\033[0m"
 				sleep 3
 				fun_conexao
-			}
-			verif_ptrs $pt
+				return
+			fi
+
+			if grep -Eq "^[[:space:]]*Port[[:space:]]+$((10#$pt))([[:space:]]|$)" /etc/ssh/sshd_config; then
+				echo -e "\n\033[1;33mŠis prievadas jau įrašytas į sshd_config.\033[0m"
+				sleep 2
+				fun_conexao
+				return
+			fi
+
+			if command -v ss >/dev/null 2>&1 && ss -H -ltn | awk '{print $4}' | grep -Eq "(:|\])$((10#$pt))$"; then
+				echo -e "\n\033[1;31mPrievadas $pt jau klausomas kitos paslaugos. Nieko nekeičiau.\033[0m"
+				sleep 3
+				fun_conexao
+				return
+			fi
+
 			echo -e "\n\033[1;32mPRIDEDAMAS SSH PORTAS\033[0m"
-			echo ""
-			fun_addpssh() {
-				echo "Port $pt" >>/etc/ssh/sshd_config
-				service ssh restart
-			}
-			fun_bar 'fun_addpssh'
-			echo -e "\n\033[1;32mSEKMINGAI PRIDETAS PORTAS\033[0m"
+			if ! ssh_config_backup; then
+				sleep 2
+				fun_conexao
+				return
+			fi
+
+			if ! printf '\nPort %s\n' "$((10#$pt))" >>/etc/ssh/sshd_config; then
+				echo "KLAIDA: nepavyko įrašyti prievado."
+				sleep 2
+				fun_conexao
+				return
+			fi
+
+			if ! ssh_config_validate_or_restore; then
+				sleep 3
+				fun_conexao
+				return
+			fi
+
+			if ! ssh_config_reload; then
+				echo "KLAIDA: nepavyko perkrauti SSH konfigūracijos. Atkuriama ankstesnė."
+				cp -p -- "$SSHPLUS_SSH_BACKUP" /etc/ssh/sshd_config
+				/usr/sbin/sshd -t -f /etc/ssh/sshd_config && ssh_config_reload
+				sleep 3
+				fun_conexao
+				return
+			fi
+
+			echo -e "\n\033[1;32mPrievadas pridėtas. Esamas SSH ryšys nebuvo nutrauktas restart komanda.\033[0m"
 			sleep 3
 			fun_conexao
-		elif [[ "$resp" = '2' ]]; then
+
+		elif [[ "$resp" == '2' ]]; then
 			clear
 			echo -e "\E[41;1;37m         PASALINTI SSH PORTA         \E[0m"
-			echo -e "\n\033[1;33m[\033[1;31m!\033[1;33m] \033[1;32mSTANDARTINIS PORTAS \033[1;37m22 \033[1;33mATSARGIAI !\033[0m"
-			echo -e "\n\033[1;33mNAUDOJAMAS PORTAS: \033[1;37m$(grep 'Port' /etc/ssh/sshd_config | cut -d' ' -f2 | grep -v 'no' | xargs)\n"
-			echo -ne "\033[1;32mKURI PORTA NORITE PASALINTI \033[1;33m?\033[1;37m "
-			read pt
-			[[ -z "$pt" ]] && {
-				echo -e "\n\033[1;31mBlogas portas!"
+			echo -e "\n\033[1;33mDĖMESIO: nešalinkite prievado, per kurį esate prisijungę.\033[0m"
+			echo -e "\n\033[1;33mKonfigūracijoje įrašyti prievadai:\033[0m"
+			grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config | awk '{print $2}' | xargs
+			echo -ne "\n\033[1;32mKURI PORTA NORITE PASALINTI \033[1;33m?\033[1;37m "
+			read -r pt
+
+			if ! ssh_port_valid "$pt"; then
+				echo -e "\n\033[1;31mBlogas portas! Įveskite skaičių nuo 1 iki 65535.\033[0m"
 				sleep 2
 				fun_conexao
+				return
+			fi
+			pt_num=$((10#$pt))
+
+			# Neleidžiama pašalinti šiuo SSH seansu naudojamo prievado.
+			if [[ -n "${SSH_CONNECTION:-}" ]]; then
+				read -r _ssh_client _ssh_client_port _ssh_server _ssh_server_port <<< "$SSH_CONNECTION"
+				if [[ "${_ssh_server_port:-}" == "$pt_num" ]]; then
+					echo -e "\n\033[1;31mNegalima pašalinti prievado, per kurį dabar esate prisijungę ($pt_num).\033[0m"
+					sleep 3
+					fun_conexao
+					return
+				fi
+			fi
+
+			if ! grep -Eq "^[[:space:]]*Port[[:space:]]+$pt_num([[:space:]]|$)" /etc/ssh/sshd_config; then
+				echo -e "\n\033[1;31mŠis prievadas nerastas kaip tikslus Port įrašas pagrindiniame faile.\033[0m"
+				sleep 2
+				fun_conexao
+				return
+			fi
+
+			port_count=$(grep -Ec '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config || true)
+			if (( port_count <= 1 )); then
+				echo -e "\n\033[1;31mPaskutinio aiškiai nurodyto SSH prievado šalinti negalima.\033[0m"
+				echo "Tai galėtų grąžinti numatytąjį 22 prievadą."
+				sleep 3
+				fun_conexao
+				return
+			fi
+
+			if ! ssh_config_backup; then
+				sleep 2
+				fun_conexao
+				return
+			fi
+
+			tmp_cfg=$(mktemp /etc/ssh/sshd_config.sshplus.XXXXXX) || {
+				echo "KLAIDA: nepavyko sukurti laikino konfigūracijos failo."
+				sleep 2
+				fun_conexao
+				return
 			}
-			[[ $(grep -wc "$pt" '/etc/ssh/sshd_config') != '0' ]] && {
-				echo -e "\n\033[1;32mPASALINAMAS SSH PORTAS\033[0m"
-				echo ""
-				fun_delpssh() {
-					sed -i "/Port $pt/d" /etc/ssh/sshd_config
-					service ssh restart
-				}
-				fun_bar 'fun_delpssh'
-				echo -e "\n\033[1;32mPORTAS PASALINTAS SEKMINGAI\033[0m"
+			if ! awk -v p="$pt_num" '!($1 == "Port" && $2 == p) { print }' /etc/ssh/sshd_config >"$tmp_cfg"; then
+				rm -f -- "$tmp_cfg"
+				echo "KLAIDA: nepavyko paruošti konfigūracijos."
 				sleep 2
 				fun_conexao
-			} || {
-				echo -e "\n\033[1;31mBlogas portas!"
+				return
+			fi
+			chmod --reference=/etc/ssh/sshd_config "$tmp_cfg" 2>/dev/null || chmod 644 "$tmp_cfg"
+			chown --reference=/etc/ssh/sshd_config "$tmp_cfg" 2>/dev/null || true
+			if ! cat "$tmp_cfg" >/etc/ssh/sshd_config; then
+				rm -f -- "$tmp_cfg"
+				echo "KLAIDA: nepavyko atnaujinti konfigūracijos."
+				cp -p -- "$SSHPLUS_SSH_BACKUP" /etc/ssh/sshd_config
 				sleep 2
 				fun_conexao
-			}
-		elif [[ "$resp" = '3' ]]; then
-			echo -e "\n\033[1;31mGriztama.."
+				return
+			fi
+			rm -f -- "$tmp_cfg"
+
+			if ! ssh_config_validate_or_restore; then
+				sleep 3
+				fun_conexao
+				return
+			fi
+			if ! ssh_config_reload; then
+				echo "KLAIDA: SSH nepavyko perkrauti. Grąžinama ankstesnė konfigūracija."
+				cp -p -- "$SSHPLUS_SSH_BACKUP" /etc/ssh/sshd_config
+				/usr/sbin/sshd -t -f /etc/ssh/sshd_config && ssh_config_reload
+				sleep 3
+				fun_conexao
+				return
+			fi
+
+			echo -e "\n\033[1;32mSSH prievadas pašalintas iš pagrindinio konfigūracijos failo.\033[0m"
+			sleep 2
+			fun_conexao
+		elif [[ "$resp" == '3' ]]; then
+			echo -e "\n\033[1;31mGriztama..\033[0m"
 			sleep 2
 			fun_conexao
 		else
-			echo -e "\n\033[1;31mBloga parinktis!"
+			echo -e "\n\033[1;31mBloga parinktis!\033[0m"
 			sleep 2
 			fun_conexao
 		fi
