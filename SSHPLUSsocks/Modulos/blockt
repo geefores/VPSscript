@@ -1,9 +1,105 @@
 #!/bin/bash
-# Saugumo pataisymas Ubuntu 24.04:
-# senoji versija nustatydavo iptables politika ACCEPT ir isvalydavo visas taisykles.
-# Kol nera saugaus, konkreciai tikslui skirto taisykliu valdymo, nieko nekeiciame.
-clear 2>/dev/null || true
-printf '\033[1;31mSSHPLUS: ugniasienes taisykliu valymas isjungtas saugumo sumetimais.\033[0m\n'
-printf 'Senoji funkcija galejo panaikinti VPS ugniasienes apsauga.\n'
-printf 'Esamos iptables taisykles nepakeistos.\n'
-exit 2
+# SSHPLUS torrent-port protection for Ubuntu 24.04.
+# Owns only the SSHPLUS_TORRENT_* chains and their jumps; never flushes
+# global tables, changes default policies, or edits unrelated firewall rules.
+
+set -u
+
+CHAIN_IN='SSHPLUS_TORRENT_IN'
+CHAIN_OUT='SSHPLUS_TORRENT_OUT'
+PORTS='6881:6889,51413'
+
+say() { printf '%s\n' "$*"; }
+
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+    say 'Paleiskite šią funkciją per SSHPLUS administratoriaus meniu (root teisėmis).'
+    exit 1
+fi
+
+for cmd in iptables ip6tables; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        say "Trūksta komandos: $cmd. Ugniasienės taisyklės nepakeistos."
+        exit 1
+    fi
+done
+
+# Detect whether our dedicated chains are present in either address family.
+active=0
+for fw in iptables ip6tables; do
+    if "$fw" -nL "$CHAIN_IN" >/dev/null 2>&1 || "$fw" -nL "$CHAIN_OUT" >/dev/null 2>&1; then
+        active=1
+    fi
+done
+
+remove_own_rules() {
+    local fw chain parent
+    local failed=0
+    for fw in iptables ip6tables; do
+        for parent in INPUT OUTPUT; do
+            for chain in "$CHAIN_IN" "$CHAIN_OUT"; do
+                while "$fw" -C "$parent" -j "$chain" >/dev/null 2>&1; do
+                    "$fw" -D "$parent" -j "$chain" || failed=1
+                done
+            done
+        done
+        for chain in "$CHAIN_IN" "$CHAIN_OUT"; do
+            if "$fw" -nL "$chain" >/dev/null 2>&1; then
+                "$fw" -F "$chain" || failed=1
+                "$fw" -X "$chain" || failed=1
+            fi
+        done
+    done
+    return "$failed"
+}
+
+if (( active )); then
+    if remove_own_rules; then
+        rm -f /etc/Plus-torrent 2>/dev/null || true
+        say 'SSHPLUS torrentų prievadų blokavimas išjungtas. Pašalintos tik SSHPLUS_TORRENT_* taisyklės.'
+        exit 0
+    else
+        say 'Nepavyko visiškai pašalinti SSHPLUS taisyklių. Kitos ugniasienės taisyklės nepakeistos.'
+        exit 1
+    fi
+fi
+
+# Create isolated chains and attach them without changing INPUT/OUTPUT policies.
+# If any step fails, roll back only the chains/jumps created by this script.
+apply_rules() {
+    local fw chain
+    for fw in iptables ip6tables; do
+        "$fw" -N "$CHAIN_IN" || return 1
+        "$fw" -N "$CHAIN_OUT" || return 1
+
+        # Common BitTorrent peer ports. Match both source and destination ports
+        # to cover incoming peers and locally initiated connections where possible.
+        for port in 6881:6889 51413; do
+            "$fw" -A "$CHAIN_IN" -p tcp --dport "$port" -j REJECT --reject-with tcp-reset || return 1
+            "$fw" -A "$CHAIN_IN" -p tcp --sport "$port" -j REJECT --reject-with tcp-reset || return 1
+            "$fw" -A "$CHAIN_IN" -p udp --dport "$port" -j REJECT || return 1
+            "$fw" -A "$CHAIN_IN" -p udp --sport "$port" -j REJECT || return 1
+            "$fw" -A "$CHAIN_OUT" -p tcp --dport "$port" -j REJECT --reject-with tcp-reset || return 1
+            "$fw" -A "$CHAIN_OUT" -p tcp --sport "$port" -j REJECT --reject-with tcp-reset || return 1
+            "$fw" -A "$CHAIN_OUT" -p udp --dport "$port" -j REJECT || return 1
+            "$fw" -A "$CHAIN_OUT" -p udp --sport "$port" -j REJECT || return 1
+        done
+        "$fw" -A "$CHAIN_IN" -j RETURN || return 1
+        "$fw" -A "$CHAIN_OUT" -j RETURN || return 1
+        "$fw" -I INPUT 1 -j "$CHAIN_IN" || return 1
+        "$fw" -I OUTPUT 1 -j "$CHAIN_OUT" || return 1
+    done
+}
+
+if apply_rules; then
+    install -d -m 0755 /etc
+    printf '%s\n' 'SSHPLUS torrent port rules active (iptables + ip6tables)' > /etc/Plus-torrent
+    chmod 0644 /etc/Plus-torrent
+    say 'SSHPLUS torrentų prievadų blokavimas įjungtas IPv4 ir IPv6 srautui.'
+    say 'Pakeistos tik SSHPLUS_TORRENT_* grandinės; bendros taisyklės ir politikos neliečiamos.'
+    say 'Pastaba: tai ribotas prievadų blokavimas, ne visų torrentų aptikimas. Alternatyvūs prievadai ar šifruotas srautas gali apeiti blokavimą.'
+    exit 0
+else
+    say 'Taisyklių įjungti nepavyko. Vykdomas tik SSHPLUS_TORRENT_* taisyklių atšaukimas.'
+    remove_own_rules || true
+    exit 1
+fi
