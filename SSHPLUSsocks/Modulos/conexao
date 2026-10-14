@@ -91,7 +91,7 @@ SCOLOR='\033[0m'
 			clear
 			echo -e "\E[44;1;37m              SQUID DIEGIMAS                \E[0m"
 			echo ""
-			IP=$(wget -qO- ipv4.icanhazip.com)
+			IP=$(wget -qO- --https-only https://ipv4.icanhazip.com/)
 			echo -ne "\033[1;32mKAD TESTI PATVIRTINKITE SAVO IP: \033[1;37m"
 			read -e -i $IP ipdovps
 			[[ -z "$ipdovps" ]] && {
