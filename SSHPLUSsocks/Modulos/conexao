@@ -362,18 +362,52 @@ SCOLOR='\033[0m'
 			elif [[ "$resposta" = '2' ]]; then
 				echo ""
 				echo -ne "\033[1;32mKOKI PORTA NORITE NAUDOTI DROPBEAR \033[1;33m?\033[1;37m "
-				read pt
+				read -r pt
 				echo ""
-				verif_ptrs $pt
-				var1=$(grep 'DROPBEAR_PORT=' /etc/default/dropbear | cut -d'=' -f2)
+				if [[ ! "$pt" =~ ^[0-9]{1,5}$ ]] || (( 10#$pt < 1 || 10#$pt > 65535 )); then
+					echo -e "\n\033[1;31mBlogas portas! Įveskite skaičių nuo 1 iki 65535.\033[0m"
+					sleep 3
+					fun_drop
+					return
+				fi
+				if [[ ! -f /etc/default/dropbear ]] || ! grep -q '^DROPBEAR_PORT=' /etc/default/dropbear; then
+					echo -e "\n\033[1;31mNerasta DROPBEAR_PORT konfigūracija. Nieko nekeičiau.\033[0m"
+					sleep 3
+					fun_drop
+					return
+				fi
+				verif_ptrs "$((10#$pt))"
+				var1=$(grep -m1 '^DROPBEAR_PORT=' /etc/default/dropbear | cut -d'=' -f2)
+				if [[ ! "$var1" =~ ^[0-9]{1,5}$ ]]; then
+					echo -e "\n\033[1;31mEsamas Dropbear prievadas netaisyklingas. Nieko nekeičiau.\033[0m"
+					sleep 3
+					fun_drop
+					return
+				fi
+				backup_dropbear=$(mktemp /etc/default/dropbear.sshplus.XXXXXX) || { echo "Nepavyko sukurti atsarginės kopijos."; fun_drop; return; }
+				cp -p /etc/default/dropbear "$backup_dropbear" || { rm -f "$backup_dropbear"; fun_drop; return; }
 				echo -e "\033[1;32mKEICIAMAS DROPBEAR PORTAS!"
-				sed -i "s/\b$var1\b/$pt/g" /etc/default/dropbear >/dev/null 2>&1
+				sed -i "0,/^DROPBEAR_PORT=.*/s//DROPBEAR_PORT=$((10#$pt))/" /etc/default/dropbear
+				if ! grep -q "^DROPBEAR_PORT=$((10#$pt))$" /etc/default/dropbear; then
+					cp -p "$backup_dropbear" /etc/default/dropbear
+					rm -f "$backup_dropbear"
+					echo "Nepavyko pakeisti Dropbear prievado; ankstesnė konfigūracija atkurta."
+					fun_drop
+					return
+				fi
 				echo ""
 				fun_bar 'sleep 2'
 				echo -e "\n\033[1;32mDROPBEAR PALEIDZIAMAS IS NAUJO!"
 				echo ""
-				fun_bar 'service dropbear restart' '/etc/init.d/dropbear restart'
-				echo -e "\n\033[1;32mPORTAS PRIDETAS SEKMINGAI!"
+				if service dropbear restart && /etc/init.d/dropbear status >/dev/null 2>&1; then
+					rm -f "$backup_dropbear"
+					echo -e "\n\033[1;32mPORTAS PAKEISTAS SEKMINGAI!"
+				else
+					cp -p "$backup_dropbear" /etc/default/dropbear
+					service dropbear restart >/dev/null 2>&1 || true
+					rm -f "$backup_dropbear"
+					echo -e "\n\033[1;31mDropbear nepasileido. Ankstesnė konfigūracija atkurta.\033[0m"
+				fi
 				sleep 3
 				clear
 				fun_conexao
@@ -411,14 +445,14 @@ SCOLOR='\033[0m'
 			[[ "$resposta" = 's' ]] && {
 				echo -e "\n\033[1;33mNUSTATYKITE DROPBEAR PORTA !\033[0m\n"
 				echo -ne "\033[1;32mKOKS PORTAS \033[1;33m?\033[1;37m "
-				read porta
-				[[ -z "$porta" ]] && {
-					echo -e "\n\033[1;31mBlogas portas!"
+				read -r porta
+				if [[ ! "$porta" =~ ^[0-9]{1,5}$ ]] || (( 10#$porta < 1 || 10#$porta > 65535 )); then
+					echo -e "\n\033[1;31mBlogas portas! Įveskite skaičių nuo 1 iki 65535.\033[0m"
 					sleep 3
-					clear
 					fun_conexao
-				}
-				verif_ptrs $porta
+					return
+				fi
+				verif_ptrs "$((10#$porta))"
 				echo -e "\n\033[1;32mDIEGIAMAS DROPBEAR ! \033[0m"
 				echo ""
 				fun_instdrop() {
