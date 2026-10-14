@@ -2296,7 +2296,9 @@ exit 0' >$RCLOCAL
 			[[ ! -e '/home/sshplus' ]] && exit 0
 			clear
 			echo -e "\E[44;1;37m                RYSIO REZIMAS                 \E[0m\n"
-			echo -e "\033[1;32mSERVISAS: \033[1;33mOPENSSH \033[1;32mPORTAS: \033[1;37m$(grep 'Port' /etc/ssh/sshd_config | cut -d' ' -f2 | grep -v 'no' | xargs)" && sts6="\033[1;32m◉ "
+			ssh_ports=$(grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | sort -nu | xargs)
+			[[ -n "$ssh_ports" ]] || ssh_ports="22 (numatytasis)"
+			echo -e "\033[1;32mSERVISAS: \033[1;33mOPENSSH \033[1;32mPORTAS: \033[1;37m${ssh_ports}" && sts6="\033[1;32m◉ "
 			[[ "$(netstat -tlpn | grep 'docker' | wc -l)" != '0' ]] && {
 				echo -e "\033[1;32mSERVISAS: \033[1;33mCHISEL DOCKER: \033[1;32mPORTAS: \033[1;37m$(netstat -nplt | grep 'docker' | awk {'print $4'} | cut -d: -f2 | xargs)"
 				sts8="\033[1;32m◉ "
