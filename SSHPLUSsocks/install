@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# DEinternet – SSHPLUS diegimo paleidiklis (Ubuntu 24.04 LTS)
+set -Eeuo pipefail
+
+PAVADINIMAS="SSHPLUS diegimo paleidiklis"
+PLUS_URL="https://raw.githubusercontent.com/geefores/VPSscript/main/SSHPLUSsocks/Plus"
+TMP_FILE="$(mktemp)"
+cleanup() { rm -f "$TMP_FILE"; }
+trap cleanup EXIT
+
+printf '\n=== %s ===\n' "$PAVADINIMAS"
+printf 'Šis įrankis atsisiųs Plus failą iš GitHub.\n'
+
+if [[ $EUID -ne 0 ]]; then
+  echo "KLAIDA: paleiskite su administratoriaus teisėmis, pvz.: sudo bash install" >&2
+  exit 1
+fi
+
+if [[ ! -r /etc/os-release ]]; then
+  echo "KLAIDA: nepavyko nustatyti operacinės sistemos." >&2
+  exit 1
+fi
+# shellcheck disable=SC1091
+. /etc/os-release
+if [[ "${ID:-}" != "ubuntu" || "${VERSION_ID:-}" != "24.04" ]]; then
+  echo "KLAIDA: šis diegimo paleidiklis skirtas Ubuntu 24.04 LTS. Aptikta: ${PRETTY_NAME:-nežinoma OS}." >&2
+  exit 1
+fi
+
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+  echo "KLAIDA: reikalingas curl arba wget. Įdiekite vieną iš jų ir bandykite dar kartą." >&2
+  exit 1
+fi
+
+printf 'Tikrinamas GitHub failas...\n'
+if command -v curl >/dev/null 2>&1; then
+  curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 "$PLUS_URL" -o "$TMP_FILE"
+else
+  wget --https-only -q "$PLUS_URL" -O "$TMP_FILE"
+fi
+
+if [[ ! -s "$TMP_FILE" ]] || ! head -n 1 "$TMP_FILE" | grep -q '^#!/'; then
+  echo "KLAIDA: GitHub atsakymas tuščias arba nėra Bash skriptas. Diegimas nepradėtas." >&2
+  exit 1
+fi
+
+if grep -Eqi 'iplogger|195\.14\.189\.73|/etc/ssh/sshd_config' "$TMP_FILE"; then
+  echo "KLAIDA: atsisiųstame Plus faile aptikta nepatvirtintų nuorodų arba SSH konfigūracijos keitimo. Diegimas sustabdytas." >&2
+  exit 1
+fi
+
+DEST="/root/Plus"
+install -m 0750 "$TMP_FILE" "$DEST"
+printf '\nPlus failas atsisiųstas į %s.\n' "$DEST"
+printf 'Prieš vykdydami patikrinkite jo turinį.\n'
+printf 'Jei norite paleisti dabar, vykdykite: bash %s\n\n' "$DEST"
