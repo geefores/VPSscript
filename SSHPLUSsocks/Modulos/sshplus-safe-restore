@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""Safely restore the limited file sets used by SSHPLUS backup.vps."""
+import argparse
+import os
+import pathlib
+import shutil
+import stat
+import sys
+import tarfile
+import tempfile
+import time
+
+PROFILES = {
+    "users": (
+        "etc/passwd", "etc/shadow", "etc/group", "etc/gshadow",
+        "etc/SSHPlus/senha", "etc/SSHPlus/senha/", "root/usuarios.db",
+    ),
+    "bot": (
+        "etc/passwd", "etc/shadow", "etc/group", "etc/gshadow",
+        "etc/SSHPlus/senha", "etc/SSHPlus/senha/", "etc/bot", "etc/bot/",
+        "root/usuarios.db",
+    ),
+}
+
+def safe_member_name(name):
+    if not name or name.startswith("/") or "\x00" in name:
+        return False
+    parts = pathlib.PurePosixPath(name).parts
+    return bool(parts) and all(p not in ("", ".", "..") for p in parts)
+
+def allowed(name, rules):
+    return any(name == rule if not rule.endswith("/") else name.startswith(rule)
+               for rule in rules)
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--profile", choices=sorted(PROFILES), required=True)
+    parser.add_argument("--root", default="/", help=argparse.SUPPRESS)
+    parser.add_argument("archive")
+    args = parser.parse_args()
+
+    if os.geteuid() != 0:
+        print("KLAIDA: atkūrimas turi būti vykdomas kaip root.", file=sys.stderr)
+        return 2
+
+    root = pathlib.Path(os.path.abspath(args.root))
+    if not root.is_dir() or root.is_symlink():
+        print("KLAIDA: netinkamas atkūrimo šakninis katalogas.", file=sys.stderr)
+        return 2
+    archive = os.path.abspath(args.archive)
+    if not os.path.isfile(archive) or os.path.islink(archive):
+        print("KLAIDA: atsarginės kopijos failas nerastas arba yra nuoroda.", file=sys.stderr)
+        return 2
+
+    rules = PROFILES[args.profile]
+    try:
+        with tarfile.open(archive, mode="r:*") as tf:
+            members = tf.getmembers()
+            if not members:
+                raise ValueError("tuščias archyvas")
+
+            normalized = []
+            seen = set()
+            for m in members:
+                name = m.name
+                while name.startswith("./"):
+                    name = name[2:]
+                if not safe_member_name(name):
+                    raise ValueError(f"nesaugus kelias archyve: {m.name!r}")
+                if name in seen:
+                    raise ValueError(f"pasikartojantis kelias archyve: {name!r}")
+                seen.add(name)
+                if not allowed(name, rules):
+                    raise ValueError(f"neleidžiamas kelias archyve: {name!r}")
+                if not (m.isfile() or m.isdir()):
+                    raise ValueError(f"neleidžiamas nuorodos ar specialaus failo tipas: {name!r}")
+                if m.isfile() and (m.mode & (stat.S_ISUID | stat.S_ISGID)):
+                    raise ValueError(f"setuid/setgid failas neleidžiamas: {name!r}")
+                normalized.append((m, name))
+
+            file_names = {name.rstrip("/") for m, name in normalized if m.isfile()}
+            required = {"etc/passwd", "etc/shadow", "etc/group", "etc/gshadow"}
+            if not required.issubset(file_names):
+                raise ValueError("trūksta vieno ar daugiau privalomų paskyrų failų")
+
+            backup_root = root / "var/backups/sshplus-restore"
+            backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(backup_root, 0o700)
+            stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+            snapshot = backup_root / f"pre-restore-{stamp}-{os.getpid()}"
+            snapshot.mkdir(mode=0o700)
+            targets = []
+            for m, name in normalized:
+                if not m.isfile():
+                    continue
+                target = root.joinpath(*pathlib.PurePosixPath(name).parts)
+                if target.is_symlink() or (target.exists() and not target.is_file()):
+                    raise ValueError(f"nesaugus paskirties failas: {target}")
+                targets.append((m, name, target))
+
+            for _, name, target in targets:
+                if target.exists():
+                    saved = snapshot.joinpath(*pathlib.PurePosixPath(name).parts)
+                    saved.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                    shutil.copy2(target, saved, follow_symlinks=False)
+
+            restored_targets = []
+            try:
+                restored = 0
+                for m, name, target in targets:
+                    parent = target.parent
+                    chain = []
+                    p = parent
+                    while p != root:
+                        chain.append(p)
+                        p = p.parent
+                    for p in reversed(chain):
+                        if p.exists() and (p.is_symlink() or not p.is_dir()):
+                            raise ValueError(f"nesaugus paskirties katalogas: {p}")
+                        if not p.exists():
+                            p.mkdir(mode=0o755)
+
+                    source = tf.extractfile(m)
+                    if source is None:
+                        raise ValueError(f"nepavyko perskaityti archyvo failo: {name}")
+                    fd, tmp = tempfile.mkstemp(prefix=".sshplus-restore-", dir=str(parent))
+                    try:
+                        with os.fdopen(fd, "wb") as dst:
+                            shutil.copyfileobj(source, dst)
+                            dst.flush()
+                            os.fsync(dst.fileno())
+                        os.chmod(tmp, m.mode & 0o777)
+                        os.chown(tmp, 0, 0)
+                        os.replace(tmp, target)
+                        restored_targets.append((name, target))
+                        restored += 1
+                    finally:
+                        try:
+                            os.unlink(tmp)
+                        except FileNotFoundError:
+                            pass
+            except Exception:
+                for name, target in reversed(restored_targets):
+                    saved = snapshot.joinpath(*pathlib.PurePosixPath(name).parts)
+                    if saved.exists():
+                        shutil.copy2(saved, target, follow_symlinks=False)
+                    else:
+                        try:
+                            target.unlink()
+                        except FileNotFoundError:
+                            pass
+                raise
+
+        print(f"Atkurta failų: {restored}")
+        print(f"Prieš atkūrimą išsaugota kopija: {snapshot}")
+        return 0
+    except (tarfile.TarError, OSError, ValueError) as exc:
+        print(f"KLAIDA: atkūrimas sustabdytas: {exc}", file=sys.stderr)
+        return 1
+
+if __name__ == "__main__":
+    raise SystemExit(main())
