@@ -930,29 +930,52 @@ SCOLOR='\033[0m'
 					echo -e "\033[1;33mNAUDOJAMAS PORTAS: \033[1;32m$opnp"
 					echo ""
 					echo -ne "\033[1;32mKOKI PORTA NORITE NAUDOTI \033[1;33m?\033[1;37m "
-					read porta
-					[[ -z "$porta" ]] && {
-						echo ""
-						echo -e "\033[1;31mBlogas portas!"
+					read -r porta
+					if [[ ! "$porta" =~ ^[0-9]{1,5}$ ]] || (( 10#$porta < 1 || 10#$porta > 65535 )); then
+						echo -e "\n\033[1;31mBlogas portas! Įveskite skaičių nuo 1 iki 65535.\033[0m"
 						sleep 3
 						fun_conexao
-					}
-					verif_ptrs
+						return
+					fi
+					porta=$((10#$porta))
+					if [[ ! -f /etc/openvpn/server.conf || ! -f /etc/openvpn/client-common.txt ]] || ! grep -Eq '^port[[:space:]]+[0-9]+$' /etc/openvpn/server.conf; then
+						echo -e "\n\033[1;31mOpenVPN konfigūracija nerasta arba netinkama. Nieko nekeičiau.\033[0m"
+						sleep 3
+						fun_conexao
+						return
+					fi
+					verif_ptrs "$porta"
 					echo ""
 					echo -e "\033[1;32mKEICIAMAS OPENVPN PORTAS!\033[1;33m"
 					echo ""
 					fun_opn() {
-						var_ptovpn=$(sed -n '1 p' /etc/openvpn/server.conf)
-						sed -i "s/\b$var_ptovpn\b/port $porta/g" /etc/openvpn/server.conf
-						sleep 1
-						var_ptovpn2=$(sed -n '7 p' /etc/openvpn/client-common.txt | awk {'print $NF'})
-						sed -i "s/\b$var_ptovpn2/\b$porta/g" /etc/openvpn/client-common.txt
-						sleep 1
-						service openvpn restart
+						local server_backup client_backup
+						server_backup=$(mktemp /etc/openvpn/server.conf.sshplus.XXXXXX) || return 1
+						client_backup=$(mktemp /etc/openvpn/client-common.txt.sshplus.XXXXXX) || { rm -f "$server_backup"; return 1; }
+						cp -p /etc/openvpn/server.conf "$server_backup" && cp -p /etc/openvpn/client-common.txt "$client_backup" || { rm -f "$server_backup" "$client_backup"; return 1; }
+						if ! sed -i "0,/^port[[:space:]]\+[0-9]\+$/s//port $porta/" /etc/openvpn/server.conf; then
+							cp -p "$server_backup" /etc/openvpn/server.conf; cp -p "$client_backup" /etc/openvpn/client-common.txt; rm -f "$server_backup" "$client_backup"; return 1
+						fi
+						if grep -Eq '^remote[[:space:]]+' /etc/openvpn/client-common.txt; then
+							if ! sed -i -E "0,/^(remote[[:space:]]+[^[:space:]]+[[:space:]]+)[0-9]+/s//\1$porta/" /etc/openvpn/client-common.txt; then
+								cp -p "$server_backup" /etc/openvpn/server.conf; cp -p "$client_backup" /etc/openvpn/client-common.txt; rm -f "$server_backup" "$client_backup"; return 1
+							fi
+						fi
+						if service openvpn restart; then
+							rm -f "$server_backup" "$client_backup"
+							return 0
+						fi
+						cp -p "$server_backup" /etc/openvpn/server.conf
+						cp -p "$client_backup" /etc/openvpn/client-common.txt
+						service openvpn restart >/dev/null 2>&1 || true
+						rm -f "$server_backup" "$client_backup"
+						return 1
 					}
-					fun_bar 'fun_opn'
-					echo ""
-					echo -e "\033[1;32mPORTAS PAKEISTAS SEKMINGAI!\033[1;33m"
+					if fun_bar 'fun_opn'; then
+						echo -e "\n\033[1;32mOpenVPN prievadas pakeistas.\033[0m"
+					else
+						echo -e "\n\033[1;31mPrievado pakeisti nepavyko; bandyta atkurti ankstesnę konfigūraciją.\033[0m"
+					fi
 					sleep 2
 					fun_conexao
 					;;
