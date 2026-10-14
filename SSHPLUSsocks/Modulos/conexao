@@ -989,8 +989,9 @@ SCOLOR='\033[0m'
 						rm -f "$server_backup" "$client_backup"
 						return 1
 					}
-					if fun_bar 'fun_opn'; then
-						echo -e "\n\033[1;32mOpenVPN prievadas pakeistas.\033[0m"
+					# Vykdyti tiesiogiai: fun_bar paleidžia komandą fone ir neperduoda jos klaidos kodo.
+					if fun_opn; then
+						echo -e "\n\033[1;32mOpenVPN prievado keitimo komanda pavyko.\033[0m"
 					else
 						echo -e "\n\033[1;31mPrievado pakeisti nepavyko; bandyta atkurti ankstesnę konfigūraciją.\033[0m"
 					fi
