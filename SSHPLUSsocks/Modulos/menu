@@ -345,6 +345,7 @@ _onlin=$(printf '%-5s' "$_onli")
 _userexp=$(printf '%-5s' "$_expuser")
 _tuser=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)
 clear
+# MOBILE MENU FIX 2026-10-15 NO PROCESS PID LIST
 # Telefonui pritaikytas meniu: dviejų stulpelių pagrindinis meniu.
 # Ribojame plotį, nes kai kurios mobilios SSH programos neteisingai praneša terminalo dydį.
 _cols=$(tput cols 2>/dev/null || stty size 2>/dev/null | awk '{print $2}' || echo 40)
