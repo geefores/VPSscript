@@ -119,10 +119,10 @@ backbot=$1
 			echo -e "\033[1;36mAtkuriama atsargine kopija..."
 			echo ""
 			sleep 2s
-			cp /root/backup.vps /backup.vps
-			cd /
-			tar -xvf backup.vps
-			rm /backup.vps
+			/bin/sshplus-safe-restore --profile users /root/backup.vps || {
+				echo -e "\033[1;31mAtkūrimas sustabdytas: archyvas netinkamas arba atkūrimas nepavyko.\033[0m"
+				exit 1
+			}
 			echo ""
 			echo -e "\033[1;36mVartotojai ir\033[1;36m Slaptazodziai sekmingai importuoti.\033[0m"
 			echo ""

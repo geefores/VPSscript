@@ -2251,17 +2251,21 @@ while :; do
                         break
                     }
                     [[ "$Resp" = @(Sim|sim|SIM) ]] && {
-                        filebkp=$(ls /tmp | grep '.vps')
-                        [[ -e /tmp/$filebkp ]] && {
-                            mv /tmp/$filebkp /backup.vps
-                            cd /
-                            tar -xvf backup.vps
-                            rm /backup.vps
-                            ShellBot.sendMessage --chat_id ${id_admin} \
-                                --text "$(echo -e "✅ Backup restaurado\ncom sucesso!")" \
+                        filebkp="$(find /tmp -maxdepth 1 -type f -name '*.vps' -print -quit)"
+                        if [[ -n "$filebkp" && -f "$filebkp" && ! -L "$filebkp" ]] &&
+                           /bin/sshplus-safe-restore --profile bot "$filebkp"; then
+                            rm -f -- "$filebkp"
+                            ShellBot.sendMessage --chat_id "${id_admin}" \\
+                                --text "$(echo -e "✅ Backup restaurado\\ncom sucesso!")" \\
                                 --parse_mode html
-                            break
-                        }
+                        else
+                            [[ -n "$filebkp" ]] && rm -f -- "$filebkp"
+                            ShellBot.sendMessage --chat_id "${id_admin}" \\
+                                --text "$(echo -e "❌ Backup atmestas: archyvas netinkamas arba atkūrimas nepavyko.")" \\
+                                --parse_mode html
+                        fi
+                        break
+
                     }
                     break
                     ;;
