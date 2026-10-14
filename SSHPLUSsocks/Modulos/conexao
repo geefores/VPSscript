@@ -1520,26 +1520,38 @@ exit 0' >$RCLOCAL
 			echo ""
 			fun_bar 'fun_dep > /dev/null 2>&1'
 			fun_ropen() {
-				[[ "$OS" = 'debian' ]] && {
-					if pgrep systemd-journal; then
-						systemctl restart openvpn@server.service
-					else
-						/etc/init.d/openvpn restart
+				# Pirmiausia tikriname tą systemd vienetą, kurį naudoja SSHPLUS.
+				if command -v systemctl >/dev/null 2>&1 && systemctl cat openvpn@server.service >/dev/null 2>&1; then
+					if ! systemctl restart openvpn@server.service; then
+						return 1
 					fi
-				} || {
-					if pgrep systemd-journal; then
-						systemctl restart openvpn@server.service
-						systemctl enable openvpn@server.service
-					else
-						service openvpn restart
-						chkconfig openvpn on
+					sleep 2
+					if ! systemctl is-active --quiet openvpn@server.service; then
+						return 1
 					fi
-				}
+					# Įjungimas paleidžiant sistemą yra papildomas veiksmas;
+					# jo klaidos taip pat neturi būti nutylimos.
+					systemctl enable openvpn@server.service >/dev/null 2>&1 || return 1
+					return 0
+				fi
+				if command -v service >/dev/null 2>&1 && service openvpn restart; then
+					sleep 2
+					service openvpn status >/dev/null 2>&1 || return 1
+					return 0
+				fi
+				return 1
 			}
 			echo ""
-			echo -e "\033[1;32mOPENVPN PALEIDZIAMAS IS NAUJO"
+			echo -e "\033[1;32mOPENVPN PALEIDŽIAMAS IŠ NAUJO"
 			echo ""
-			fun_bar 'fun_ropen'
+			if fun_ropen; then
+				echo -e "\033[1;32mOpenVPN paslauga paleista ir patikrinta.\033[0m"
+			else
+				echo -e "\033[1;31mKLAIDA: OpenVPN paslauga nepasileido arba jos būsenos nepavyko patikrinti. Diegimo sėkmė nepatvirtinta.\033[0m"
+				sleep 4
+				fun_conexao
+				return 1
+			fi
 			IP2=$(wget -4qO- "https://whatismyip.akamai.com/")
 			if [[ "$IP" != "$IP2" ]]; then
 				IP="$IP2"
