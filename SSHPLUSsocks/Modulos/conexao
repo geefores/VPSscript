@@ -436,8 +436,8 @@ SCOLOR='\033[0m'
 				echo -e "\033[1;32mKONFIGURUOJAMAS DROPBEAR PORTAS!\033[0m"
 				echo ""
 				fun_bar 'fun_ports'
-				grep -v "^PasswordAuthentication yes" /etc/ssh/sshd_config >/tmp/passlogin && mv /tmp/passlogin /etc/ssh/sshd_config
-				echo "PasswordAuthentication yes" >>/etc/ssh/sshd_config
+				# Saugumas: nekeisti SSH slaptažodinio prisijungimo politikos automatiškai.
+				# Esama /etc/ssh/sshd_config konfigūracija paliekama nepakeista.
 				grep -v "^PermitTunnel yes" /etc/ssh/sshd_config >/tmp/ssh && mv /tmp/ssh /etc/ssh/sshd_config
 				echo "PermitTunnel yes" >>/etc/ssh/sshd_config
 				echo ""
@@ -771,7 +771,17 @@ SCOLOR='\033[0m'
 					#cat cert.pem key.pem >>/etc/stunnel/stunnel.pem
 					#rm key.pem cert.pem >/dev/null 2>&1
 					sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4
-					cd /etc/stunnel && wget http://195.14.189.73:81/deintVPS/SSHPLUSsocks/Sistema/script/stunnel.pem && cd $HOME
+					# Nekrauti sertifikato iš seno HTTP serverio: generuoti vietinį sertifikatą.
+					install -d -m 0750 /etc/stunnel
+					if ! openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+					  -subj "/CN=$(hostname -f 2>/dev/null || hostname)" \
+					  -keyout /etc/stunnel/stunnel.key -out /etc/stunnel/stunnel.crt; then
+					  echo "KLAIDA: nepavyko sukurti stunnel sertifikato." >&2
+					  return 1
+					fi
+					cat /etc/stunnel/stunnel.crt /etc/stunnel/stunnel.key > /etc/stunnel/stunnel.pem
+					chmod 0640 /etc/stunnel/stunnel.key /etc/stunnel/stunnel.pem
+					chown root:root /etc/stunnel/stunnel.crt /etc/stunnel/stunnel.key /etc/stunnel/stunnel.pem
 				}
 				fun_bar 'ssl_certif'
 				echo -e "\n\033[1;32mSSL TUNNEL PALEIDZIAMAS IS NAUJO !\033[0m"
@@ -1269,17 +1279,29 @@ SCOLOR='\033[0m'
 				fun_bar 'yum install epel-release -y'
 				fun_bar 'yum install openvpn iptables openssl wget ca-certificates -y'
 			}
-			[[ -d /etc/openvpn/easy-rsa/ ]] && {
-				rm -rf /etc/openvpn/easy-rsa/
-			}
+			# Esamas EasyRSA katalogas nešalinamas prieš atsisiuntimo patikrą.
 			# Adquirindo easy-rsa
 			echo ""
 			fun_dep() {
-				wget -O ~/EasyRSA-3.0.1.tgz "http://195.14.189.73:81/deintVPS/SSHPLUSsocks/Install/EasyRSA-3.0.1.tgz"
-				[[ ! -e $HOME/EasyRSA-3.0.1.tgz ]] && {
-					wget -O ~/EasyRSA-3.0.1.tgz "http://sshplus.xyz/script/EasyRSA-3.0.1.tgz"
-				}
-				tar xzf ~/EasyRSA-3.0.1.tgz -C ~/
+				local easyrsa_archive="$HOME/EasyRSA-3.0.1.tgz"
+				rm -f "$easyrsa_archive"
+				if ! curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+				  "https://github.com/OpenVPN/easy-rsa/releases/download/v3.0.1/EasyRSA-3.0.1.tgz" \
+				  -o "$easyrsa_archive"; then
+				  echo "KLAIDA: EasyRSA atsisiuntimas nepavyko; OpenVPN diegimas nutrauktas." >&2
+				  rm -f "$easyrsa_archive"
+				  return 1
+				fi
+				if ! tar -tzf "$easyrsa_archive" >/dev/null 2>&1 || ! tar -tzf "$easyrsa_archive" | grep -q '^EasyRSA-3\.0\.1/'; then
+				  echo "KLAIDA: EasyRSA archyvas netinkamas; OpenVPN diegimas nutrauktas." >&2
+				  rm -f "$easyrsa_archive"
+				  return 1
+				fi
+				# Tik po sėkmingo atsisiuntimo ir archyvo patikros keičiame esamą katalogą.
+				if [[ -d /etc/openvpn/easy-rsa/ ]]; then
+				  mv /etc/openvpn/easy-rsa "/etc/openvpn/easy-rsa.backup.$(date +%Y%m%d%H%M%S)"
+				fi
+				tar xzf "$easyrsa_archive" -C "$HOME"
 				mv ~/EasyRSA-3.0.1/ /etc/openvpn/
 				mv /etc/openvpn/EasyRSA-3.0.1/ /etc/openvpn/easy-rsa/
 				chown -R root:root /etc/openvpn/easy-rsa/
