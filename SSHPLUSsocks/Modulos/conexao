@@ -8,7 +8,7 @@ scor='\033[0m'
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
 SCOLOR='\033[0m'
-[[ $(awk -F" " '{print $2}' /usr/lib/licence) == "@KIRITO_SSH" ]] && {
+[[ $(awk -F" " '{print $2}' /usr/lib/licence 2>/dev/null) == "@DEINTERNET" ]] && {
 	ram1=$(free -h | grep -i mem | awk {'print $2'})
 	ram2=$(free -h | grep -i mem | awk {'print $4'})
 	ram3=$(free -h | grep -i mem | awk {'print $3'})
@@ -91,7 +91,7 @@ SCOLOR='\033[0m'
 			clear
 			echo -e "\E[44;1;37m              SQUID DIEGIMAS                \E[0m"
 			echo ""
-			IP=$(wget -qO- --https-only https://ipv4.icanhazip.com/)
+			IP=$(wget -qO- ipv4.icanhazip.com)
 			echo -ne "\033[1;32mKAD TESTI PATVIRTINKITE SAVO IP: \033[1;37m"
 			read -e -i $IP ipdovps
 			[[ -z "$ipdovps" ]] && {
@@ -475,13 +475,7 @@ SCOLOR='\033[0m'
 				fun_ports() {
 					sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear >/dev/null 2>&1
 					sed -i "s/DROPBEAR_PORT=22/DROPBEAR_PORT=$porta/g" /etc/default/dropbear >/dev/null 2>&1
-					# Vartotojo pasirinktas prievadas nustatomas tik per DROPBEAR_PORT.
-					# Papildomas kietai įrašytas -p 110 galėtų perrašyti pasirinktą prievadą.
-					if grep -q '^DROPBEAR_EXTRA_ARGS=' /etc/default/dropbear; then
-						sed -i 's|^DROPBEAR_EXTRA_ARGS=.*|DROPBEAR_EXTRA_ARGS=""|' /etc/default/dropbear
-					else
-						printf '%s\\n' 'DROPBEAR_EXTRA_ARGS=""' >> /etc/default/dropbear
-					fi
+					sed -i 's/DROPBEAR_EXTRA_ARGS=/DROPBEAR_EXTRA_ARGS="-p 110"/g' /etc/default/dropbear >/dev/null 2>&1
 				}
 				echo ""
 				echo -e "\033[1;32mKONFIGURUOJAMAS DROPBEAR PORTAS!\033[0m"
@@ -1362,26 +1356,17 @@ SCOLOR='\033[0m'
 				echo -e "\033[1;32mSISTEMOS ATNAUJINIMAS"
 				echo ""
 				fun_attos() {
-					apt-get update -y
+					apt-get update-y
 				}
-				if ! fun_attos; then
-					echo -e "\n\033[1;31mKLAIDA: apt-get update nepavyko. OpenVPN diegimas nutrauktas.\033[0m"
-					sleep 3
-					fun_conexao
-					return 1
-				fi
+				fun_bar 'fun_attos'
 				echo ""
 				echo -e "\033[1;32mPRIKLAUSOMYBIU DIEGIMAS"
 				echo ""
 				fun_instdep() {
-					apt-get install openvpn iptables openssl ca-certificates zip -y
+					apt-get install openvpn iptables openssl ca-certificates -y
+					apt-get install zip -y
 				}
-				if ! fun_instdep; then
-					echo -e "\n\033[1;31mKLAIDA: OpenVPN priklausomybių įdiegti nepavyko. Diegimas nutrauktas.\033[0m"
-					sleep 3
-					fun_conexao
-					return 1
-				fi
+				fun_bar 'fun_instdep'
 			} || {
 				fun_bar 'yum install epel-release -y'
 				fun_bar 'yum install openvpn iptables openssl wget ca-certificates -y'
@@ -1399,12 +1384,8 @@ SCOLOR='\033[0m'
 				  rm -f "$easyrsa_archive"
 				  return 1
 				fi
-				if ! tar -tzf "$easyrsa_archive" >/dev/null 2>&1 || ! tar -tzf "$easyrsa_archive" | awk '
-				  BEGIN { ok=1; found=0 }
-				  { if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) ok=0; if ($0 ~ /^EasyRSA-3\.0\.1\//) found=1 }
-				  END { exit !(ok && found) }
-				'; then
-				  echo "KLAIDA: EasyRSA archyvas netinkamas arba jame yra nesaugių kelių; OpenVPN diegimas nutrauktas." >&2
+				if ! tar -tzf "$easyrsa_archive" >/dev/null 2>&1 || ! tar -tzf "$easyrsa_archive" | grep -q '^EasyRSA-3\.0\.1/'; then
+				  echo "KLAIDA: EasyRSA archyvas netinkamas; OpenVPN diegimas nutrauktas." >&2
 				  rm -f "$easyrsa_archive"
 				  return 1
 				fi
@@ -1412,23 +1393,21 @@ SCOLOR='\033[0m'
 				if [[ -d /etc/openvpn/easy-rsa/ ]]; then
 				  mv /etc/openvpn/easy-rsa "/etc/openvpn/easy-rsa.backup.$(date +%Y%m%d%H%M%S)"
 				fi
-				if ! tar xzf "$easyrsa_archive" -C "$HOME" || ! mv "$HOME/EasyRSA-3.0.1" /etc/openvpn/ || ! mv /etc/openvpn/EasyRSA-3.0.1 /etc/openvpn/easy-rsa/; then
-				  echo "KLAIDA: EasyRSA archyvo išskleidimas arba perkėlimas nepavyko." >&2
-				  return 1
-				fi
-				chown -R root:root /etc/openvpn/easy-rsa/ || return 1
-				rm -f "$easyrsa_archive"
-				cd /etc/openvpn/easy-rsa/ || return 1
-				if ! ./easyrsa init-pki || ! ./easyrsa --batch build-ca nopass || ! ./easyrsa gen-dh || ! ./easyrsa build-server-full server nopass || ! ./easyrsa build-client-full SSHPLUS nopass || ! ./easyrsa gen-crl; then
-				  echo "KLAIDA: EasyRSA sertifikatų generavimas nepavyko; OpenVPN diegimas nutrauktas." >&2
-				  return 1
-				fi
-				if ! cp pki/ca.crt pki/private/ca.key pki/dh.pem pki/issued/server.crt pki/private/server.key pki/crl.pem /etc/openvpn/; then
-				  echo "KLAIDA: OpenVPN sertifikatų kopijavimas nepavyko." >&2
-				  return 1
-				fi
-				chown nobody:$GROUPNAME /etc/openvpn/crl.pem || return 1
-				openvpn --genkey secret /etc/openvpn/ta.key || return 1
+				tar xzf "$easyrsa_archive" -C "$HOME"
+				mv ~/EasyRSA-3.0.1/ /etc/openvpn/
+				mv /etc/openvpn/EasyRSA-3.0.1/ /etc/openvpn/easy-rsa/
+				chown -R root:root /etc/openvpn/easy-rsa/
+				rm -rf ~/EasyRSA-3.0.1.tgz
+				cd /etc/openvpn/easy-rsa/
+				./easyrsa init-pki
+				./easyrsa --batch build-ca nopass
+				./easyrsa gen-dh
+				./easyrsa build-server-full server nopass
+				./easyrsa build-client-full SSHPLUS nopass
+				./easyrsa gen-crl
+				cp pki/ca.crt pki/private/ca.key pki/dh.pem pki/issued/server.crt pki/private/server.key /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn
+				chown nobody:$GROUPNAME /etc/openvpn/crl.pem
+				openvpn --genkey --secret /etc/openvpn/ta.key
 				# Generando server.conf
 				echo "port $porta
 proto $PROTOCOL
@@ -1489,7 +1468,7 @@ management localhost 7505
 verb 3
 crl-verify crl.pem
 client-to-client
-verify-client-cert none
+client-cert-not-required
 username-as-common-name
 plugin $(find /usr -type f -name 'openvpn-plugin-auth-pam.so') login
 duplicate-cn" >>/etc/openvpn/server.conf
@@ -1533,47 +1512,28 @@ exit 0' >$RCLOCAL
 			}
 			echo -e "\033[1;32mOPENVPN DIEGIMAS  \033[1;31m(\033[1;33mTAI GALI UZTRUKTI!\033[1;31m)"
 			echo ""
-			# EasyRSA ir OpenVPN konfigūraciją vykdome tiesiogiai: fun_bar
-			# paleidžia komandą fone ir gali paslėpti jos nesėkmės kodą.
-			if ! fun_dep; then
-				echo -e "\033[1;31mKLAIDA: OpenVPN/EasyRSA paruošimas nepavyko. Paslauga nepaleista.\033[0m"
-				sleep 4
-				fun_conexao
-				return 1
-			fi
+			fun_bar 'fun_dep > /dev/null 2>&1'
 			fun_ropen() {
-				# Pirmiausia tikriname tą systemd vienetą, kurį naudoja SSHPLUS.
-				if command -v systemctl >/dev/null 2>&1 && systemctl cat openvpn@server.service >/dev/null 2>&1; then
-					if ! systemctl restart openvpn@server.service; then
-						return 1
+				[[ "$OS" = 'debian' ]] && {
+					if pgrep systemd-journal; then
+						systemctl restart openvpn@server.service
+					else
+						/etc/init.d/openvpn restart
 					fi
-					sleep 2
-					if ! systemctl is-active --quiet openvpn@server.service; then
-						return 1
+				} || {
+					if pgrep systemd-journal; then
+						systemctl restart openvpn@server.service
+						systemctl enable openvpn@server.service
+					else
+						service openvpn restart
+						chkconfig openvpn on
 					fi
-					# Įjungimas paleidžiant sistemą yra papildomas veiksmas;
-					# jo klaidos taip pat neturi būti nutylimos.
-					systemctl enable openvpn@server.service >/dev/null 2>&1 || return 1
-					return 0
-				fi
-				if command -v service >/dev/null 2>&1 && service openvpn restart; then
-					sleep 2
-					service openvpn status >/dev/null 2>&1 || return 1
-					return 0
-				fi
-				return 1
+				}
 			}
 			echo ""
-			echo -e "\033[1;32mOPENVPN PALEIDŽIAMAS IŠ NAUJO"
+			echo -e "\033[1;32mOPENVPN PALEIDZIAMAS IS NAUJO"
 			echo ""
-			if fun_ropen; then
-				echo -e "\033[1;32mOpenVPN paslauga paleista ir patikrinta.\033[0m"
-			else
-				echo -e "\033[1;31mKLAIDA: OpenVPN paslauga nepasileido arba jos būsenos nepavyko patikrinti. Diegimo sėkmė nepatvirtinta.\033[0m"
-				sleep 4
-				fun_conexao
-				return 1
-			fi
+			fun_bar 'fun_ropen'
 			IP2=$(wget -4qO- "https://whatismyip.akamai.com/")
 			if [[ "$IP" != "$IP2" ]]; then
 				IP="$IP2"
