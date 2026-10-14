@@ -33,6 +33,40 @@ if [[ -z "$lst1" ]]; then
   exit 2
 fi
 
+# Download and validate every module before changing any system files.
+modules=(
+  ShellBot.sh addhost delhost alterarsenha criarusuario expcleaner mudardata remover
+  sshplus-safe-restore
+  criarteste verifbot droplimiter alterarlimite ajuda sshmonitor badvpn
+  userbackup instsqd blockt otimizar menu speedtest banner senharoot
+  reiniciarservicos reiniciarsistema attscript conexao delscript detalhes
+  botssh infousers verifatt limiter uexpired cabecalho bot open.py slow_dns
+  proxy.py wsproxy.py trojan-go botteste onlineapp
+)
+
+staging_dir="$(mktemp -d /tmp/sshplus-modules.XXXXXX)"
+version_staged="${staging_dir}/versao"
+cleanup_staging() { rm -rf -- "$staging_dir"; }
+trap cleanup_staging EXIT
+
+for module in "${modules[@]}"; do
+  staged_file="${staging_dir}/${module}"
+  if ! curl --fail --location --silent --show-error --retry 2 --connect-timeout 10 \
+      "${MODULES_URL}/${module}" -o "$staged_file"; then
+    die "Nepavyko atsisiųsti modulio ${module}; sistema nepakeista."
+  fi
+  [[ -s "$staged_file" ]] || die "GitHub grąžino tuščią modulį ${module}; sistema nepakeista."
+  log "Patikrintas atsisiuntimas: ${module}"
+done
+
+# Version metadata is staged too; failure is non-fatal, as in the original flow.
+version_ready=0
+if curl --fail --location --silent --show-error --retry 2 \
+    "${INSTALL_URL}/versao" -o "$version_staged" && [[ -s "$version_staged" ]]; then
+  version_ready=1
+fi
+
+# No system changes happen until all required modules have been downloaded.
 install -d -m 0750 \
   /etc/SSHPlus/v2ray \
   /etc/SSHPlus/senha \
@@ -60,21 +94,25 @@ backup_if_exists() {
   cp -a -- "$path" "${backup_dir}/${rel}"
 }
 
-fetch_to_path() {
-  local name="$1" destination="$2" mode="${3:-0755}" tmp
-  tmp="$(mktemp)"
-  if ! curl --fail --location --silent --show-error --retry 2 --connect-timeout 10 \
-      "${MODULES_URL}/${name}" -o "$tmp"; then
-    rm -f -- "$tmp"
-    die "Nepavyko atsisiųsti GitHub failo: SSHPLUSsocks/Modulos/${name}. Esami failai palikti nepakeisti."
-  fi
-  [[ -s "$tmp" ]] || { rm -f -- "$tmp"; die "GitHub grąžino tuščią failą: ${name}"; }
+install_staged_module() {
+  local name="$1" destination mode="${2:-0755}"
+  case "$name" in
+    ShellBot.sh|cabecalho|bot|open.py|proxy.py|wsproxy.py)
+      destination="/etc/SSHPlus/${name}"
+      ;;
+    *)
+      destination="/bin/${name}"
+      ;;
+  esac
   backup_if_exists "$destination"
-  install -D -m "$mode" "$tmp" "$destination"
-  rm -f -- "$tmp"
+  install -D -m "$mode" "${staging_dir}/${name}" "$destination"
+  log "Įdiegtas modulis: ${name}"
 }
 
 # Preserve the legacy marker files used by existing modules.
+backup_if_exists /usr/lib/sshplus
+backup_if_exists "${lst2%/}/licence"
+backup_if_exists /etc/SSHPlus/.tmp/crazy
 printf '%s\n' 'by: @DEINTERNET' > /usr/lib/sshplus
 install -m 0640 /usr/lib/sshplus "${lst2%/}/licence"
 install -m 0640 /usr/lib/sshplus /etc/SSHPlus/.tmp/crazy
@@ -82,42 +120,21 @@ install -m 0640 /usr/lib/sshplus /etc/SSHPlus/.tmp/crazy
 # Public IP is optional metadata. Do not contact the old HTTP host.
 if public_ip="$(curl --fail --location --silent --show-error --connect-timeout 5 https://api.ipify.org 2>/dev/null)" \
    && [[ "$public_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+  backup_if_exists /etc/IP
   printf '%s\n' "$public_ip" > /etc/IP
 fi
 
-# Download module files from this GitHub repository over HTTPS.
-modules=(
-  ShellBot.sh addhost delhost alterarsenha criarusuario expcleaner mudardata remover
-  sshplus-safe-restore
-  criarteste verifbot droplimiter alterarlimite ajuda sshmonitor badvpn
-  userbackup instsqd blockt otimizar menu speedtest banner senharoot
-  reiniciarservicos reiniciarsistema attscript conexao delscript detalhes
-  botssh infousers verifatt limiter uexpired cabecalho bot open.py slow_dns
-  proxy.py wsproxy.py trojan-go botteste onlineapp
-)
-
 for module in "${modules[@]}"; do
-  case "$module" in
-    ShellBot.sh|cabecalho|bot|open.py|proxy.py|wsproxy.py)
-      destination="/etc/SSHPlus/${module}"
-      ;;
-    *)
-      destination="/bin/${module}"
-      ;;
-  esac
-  fetch_to_path "$module" "$destination" 0755
-  log "Įdiegtas modulis: ${module}"
+  install_staged_module "$module"
 done
 
 # Version metadata from the same repository; it is not executable code.
-version_tmp="$(mktemp)"
-if curl --fail --location --silent --show-error --retry 2 \
-    "${INSTALL_URL}/versao" -o "$version_tmp" && [[ -s "$version_tmp" ]]; then
+if [[ "$version_ready" -eq 1 ]]; then
   backup_if_exists /bin/versao
-  install -m 0644 "$version_tmp" /bin/versao
-  install -m 0644 "$version_tmp" /home/sshplus
+  backup_if_exists /home/sshplus
+  install -m 0644 "$version_staged" /bin/versao
+  install -m 0644 "$version_staged" /home/sshplus
 fi
-rm -f -- "$version_tmp"
 
 # Create autostart only when absent; never overwrite a user's existing file.
 if [[ ! -e /etc/autostart ]]; then
