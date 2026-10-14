@@ -1527,7 +1527,14 @@ exit 0' >$RCLOCAL
 			}
 			echo -e "\033[1;32mOPENVPN DIEGIMAS  \033[1;31m(\033[1;33mTAI GALI UZTRUKTI!\033[1;31m)"
 			echo ""
-			fun_bar 'fun_dep > /dev/null 2>&1'
+			# EasyRSA ir OpenVPN konfigūraciją vykdome tiesiogiai: fun_bar
+			# paleidžia komandą fone ir gali paslėpti jos nesėkmės kodą.
+			if ! fun_dep; then
+				echo -e "\033[1;31mKLAIDA: OpenVPN/EasyRSA paruošimas nepavyko. Paslauga nepaleista.\033[0m"
+				sleep 4
+				fun_conexao
+				return 1
+			fi
 			fun_ropen() {
 				# Pirmiausia tikriname tą systemd vienetą, kurį naudoja SSHPLUS.
 				if command -v systemctl >/dev/null 2>&1 && systemctl cat openvpn@server.service >/dev/null 2>&1; then
