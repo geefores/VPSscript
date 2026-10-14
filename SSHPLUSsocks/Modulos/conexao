@@ -1422,7 +1422,7 @@ SCOLOR='\033[0m'
 				./easyrsa gen-crl
 				cp pki/ca.crt pki/private/ca.key pki/dh.pem pki/issued/server.crt pki/private/server.key /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn
 				chown nobody:$GROUPNAME /etc/openvpn/crl.pem
-				openvpn --genkey --secret /etc/openvpn/ta.key
+				openvpn --genkey secret /etc/openvpn/ta.key
 				# Generando server.conf
 				echo "port $porta
 proto $PROTOCOL
@@ -1483,7 +1483,7 @@ management localhost 7505
 verb 3
 crl-verify crl.pem
 client-to-client
-client-cert-not-required
+verify-client-cert none
 username-as-common-name
 plugin $(find /usr -type f -name 'openvpn-plugin-auth-pam.so') login
 duplicate-cn" >>/etc/openvpn/server.conf
