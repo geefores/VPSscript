@@ -944,7 +944,13 @@ SCOLOR='\033[0m'
 						fun_conexao
 						return
 					fi
-					verif_ptrs "$porta"
+					# Prievado užimtumo patikra turi sustabdyti veiksmą, o ne tik parodyti įspėjimą.
+					if command -v ss >/dev/null 2>&1 && ss -H -ltn | awk '{print $4}' | grep -Eq "(:|\])${porta}$"; then
+						echo -e "\n\033[1;31mPrievadas $porta jau naudojamas. OpenVPN konfigūracija nepakeista.\033[0m"
+						sleep 3
+						fun_conexao
+						return
+					fi
 					echo ""
 					echo -e "\033[1;32mKEICIAMAS OPENVPN PORTAS!\033[1;33m"
 					echo ""
