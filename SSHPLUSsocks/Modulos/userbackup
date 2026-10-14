@@ -1,146 +1,89 @@
 #!/bin/bash
+# SSHPLUS user backup utility.
+# Backups contain sensitive account data and must remain local/root-readable.
+set -u
 clear
-backbot=$1
-[[ -z $backbot ]] && {
-	IP=$(wget -qO- ipv4.icanhazip.com)
-	apchon () {
-		if netstat -nltp|grep 'dropbear' > /dev/null; then
-			[[ ! -d /var/www/html ]] && mkdir /var/www/html
-			[[ ! -d /var/www/html/backup ]] && mkdir /var/www/html/backup
-			touch /var/www/html/backup/index.html
-			/etc/init.d/apache2 restart
-		else
-			apt-get install apache2 zip -y
-			sed -i "s/Listen 80/Listen 81/g" /etc/apache2/ports.conf
-			service apache2 restart
-			[[ ! -d /var/www/html ]] && mkdir /var/www/html
-			[[ ! -d /var/www/html/backup ]] && mkdir /var/www/html/backup
-			touch /var/www/html/backup/index.html
-			chmod -R 755 /var/www
-			/etc/init.d/apache2 restart
-		fi
-	}
-	fun_temp () {
-		helice () {
-			apchon > /dev/null 2>&1 & 
-			tput civis
-			while [ -d /proc/$! ]
-			do
-				for i in / - \\ \|
-				do
-					sleep .1
-					echo -ne "\e[1D$i"
-				done
-			done
-			tput cnorm
-		}
-		echo -ne "\033[1;33mPALAUKITE\033[1;31m.\033[1;32m.\033[1;33m. \033[1;32m"
-		helice
-		echo -e "\e[1DOk"
-	}
-	geralink () {
-		if [ -d /var/www/html/backup ]; then
-			rm -rf /var/www/html/backup/backup.vps > /dev/null 2>&1
-			cp $HOME/backup.vps /var/www/html/backup/backup.vps
-			sleep 2
-		fi
-	}
-	fun_temp2 () {
-		helice () {
-			geralink > /dev/null 2>&1 & 
-			tput civis
-			while [ -d /proc/$! ]
-			do
-				for i in / - \\ \|
-				do
-					sleep .1
-					echo -ne "\e[1D$i"
-				done
-			done
-			tput cnorm
-		}
-		echo -ne "\033[1;33mGENERUOJAMAS LINK\033[1;31m.\033[1;32m.\033[1;33m. \033[1;32m"
-		helice
-		echo -e "\e[1DOk"
-	}
-	echo -e "\E[44;1;37m             Atsarginiu kopiju valdymas              \E[0m"
-	echo ""
-	echo -e "\033[1;31m[\033[1;36m1\033[1;31m] \033[1;37m• \033[1;33mSUKURTI BACKUP"
-	echo -e "\033[1;31m[\033[1;36m2\033[1;31m] \033[1;37m• \033[1;33mATSTATYTI BACKUP"
-	echo -e "\033[1;31m[\033[1;36m3\033[1;31m] \033[1;37m• \033[1;33mGRIZTI\033[1;37m"
-	echo ""
-	echo -ne "\033[1;32mKA NORITE DARYTI\033[1;31m ?\033[1;37m : "; read opcao
-	if [[ "$opcao" = '1' ]]; then
-		if [ -f "/root/usuarios.db" ]
-		then
-			rm -rf $HOME/backup.vps > /dev/null 2>&1
-			sleep 1
-			tar cvf /root/backup.vps /root/usuarios.db /etc/shadow /etc/passwd /etc/group /etc/gshadow /etc/SSHPlus/senha > /dev/null 2>&1
-			echo ""
-			echo -e "\033[1;32mBACKUP SUKURTAS SEKMINGAI !\033[0m"
-			echo ""
-			echo -ne "\033[1;32mKURTI ATSISIUNTIMO NUORODA \033[1;31m? \033[1;33m[s/n]:\033[1;37m "; read resp
-			if [[ "$resp" = "s" ]]; then
-				echo ""
-				fun_temp
-				echo ""
-				fun_temp2
-				echo ""
-				if [ -e /var/www/html/backup/backup.vps ]; then
-					if [[ "$VERSION_ID" = 'VERSION_ID="14.04"' ]]; then
-						echo -e "\033[1;32mLINK\033[1;37m: \033[1;36m$IP:81/html/backup/backup.vps\033[0m"
-					else
-						echo -e "\033[1;32mLINK\033[1;37m: \033[1;36m$IP:81/backup/backup.vps\033[0m"
-					fi
-				else
-					echo -e "\033[1;32mGalima rasti\033[1;31m" ~/"backup.vps\033[0m"
-				fi
-			else
-				echo -e "\n\033[1;32mGalima rasti\033[1;31m" ~/"backup.vps\033[0m"
-				sleep 2
-				menu
-			fi
-		else
-			echo ""
-			echo -e "\033[1;32mAtsargines kopijos kurimas...\033[0m"
-			echo ""
-			tar cvf /root/backup.vps /etc/shadow /etc/passwd /etc/group /etc/gshadow /etc/SSHPlus/senha > /dev/null 2>&1
-			sleep 2s
-			echo ""
-			echo -e "\033[1;33mFailas \033[1;32mbackup.vps"
-			echo -e "\033[1;33mbuvo sekmingai sukurtas kataloge \033[1;31m/root\033[0m"
-			echo ""
-		fi
-	fi
-	if [[ "$opcao" = '2' ]]; then
-		if [ -f "/root/backup.vps" ]
-		then
-			echo ""
-			echo -e "\033[1;36mAtkuriama atsargine kopija..."
-			echo ""
-			sleep 2s
-			/bin/sshplus-safe-restore --profile users /root/backup.vps || {
-				echo -e "\033[1;31mAtkūrimas sustabdytas: archyvas netinkamas arba atkūrimas nepavyko.\033[0m"
-				exit 1
-			}
-			echo ""
-			echo -e "\033[1;36mVartotojai ir\033[1;36m Slaptazodziai sekmingai importuoti.\033[0m"
-			echo ""
-			exit
-		else
-			echo ""
-			echo -e "\033[1;33mFailas \033[1;32mbackup.vps \033[1;33mnerastas!\033[0m"
-			echo -e "\033[1;33mIsitikinkite, kad jis yra kataloge. /root/ pavadinimu \033[1;32mbackup.vps\033[0m"
-			echo ""
-			exit
-		fi
-	fi
-	if [[ "$opcao" = '3' ]]; then
-		menu
-	fi
-} || {
-	rm /root/backup.vps 1>/dev/null 2>/dev/null
-	tar cvf /root/backup.vps /root/usuarios.db /etc/shadow /etc/passwd /etc/group /etc/gshadow /etc/bot /etc/SSHPlus/senha > /dev/null 2>&1
-	[[ -d "/etc/SSHPlus/backups" ]] && mv /root/backup.vps /etc/SSHPlus/backups/backup.vps
-	exit
-}
+backbot="${1:-}"
+
+if [[ -z "$backbot" ]]; then
+    echo -e "\E[44;1;37m             Atsarginiu kopiju valdymas              \E[0m"
+    echo ""
+    echo -e "\033[1;31m[\033[1;36m1\033[1;31m] \033[1;37m• \033[1;33mSUKURTI BACKUP"
+    echo -e "\033[1;31m[\033[1;36m2\033[1;31m] \033[1;37m• \033[1;33mATSTATYTI BACKUP"
+    echo -e "\033[1;31m[\033[1;36m3\033[1;31m] \033[1;37m• \033[1;33mGRIZTI\033[1;37m"
+    echo ""
+    echo -ne "\033[1;32mKA NORITE DARYTI\033[1;31m ?\033[1;37m : "
+    read -r opcao
+
+    if [[ "$opcao" == "1" ]]; then
+        umask 077
+        tmp_backup="$(mktemp /root/.backup.vps.XXXXXX)" || {
+            echo "Nepavyko sukurti laikino atsarginės kopijos failo."
+            exit 1
+        }
+
+        if [[ -f /root/usuarios.db ]]; then
+            tar -cf "$tmp_backup" \
+                /root/usuarios.db /etc/shadow /etc/passwd /etc/group \
+                /etc/gshadow /etc/SSHPlus/senha 2>/dev/null
+        else
+            tar -cf "$tmp_backup" \
+                /etc/shadow /etc/passwd /etc/group /etc/gshadow \
+                /etc/SSHPlus/senha 2>/dev/null
+        fi
+
+        if [[ $? -ne 0 || ! -s "$tmp_backup" ]]; then
+            rm -f -- "$tmp_backup"
+            echo -e "\033[1;31mAtsarginės kopijos sukurti nepavyko.\033[0m"
+            exit 1
+        fi
+
+        chown root:root "$tmp_backup"
+        chmod 0600 "$tmp_backup"
+        mv -f -- "$tmp_backup" /root/backup.vps
+        chmod 0600 /root/backup.vps
+
+        echo ""
+        echo -e "\033[1;32mBACKUP SUKURTAS SEKMINGAI!\033[0m"
+        echo -e "\033[1;33mFailas saugomas tik serveryje: /root/backup.vps\033[0m"
+        echo -e "\033[1;31mSaugumo sumetimais atsisiuntimo nuoroda per viešą HTTP nebekuriama.\033[0m"
+        echo ""
+    elif [[ "$opcao" == "2" ]]; then
+        if [[ -f /root/backup.vps && ! -L /root/backup.vps ]]; then
+            echo ""
+            echo -e "\033[1;36mAtkuriama atsargine kopija...\033[0m"
+            /bin/sshplus-safe-restore --profile users /root/backup.vps || {
+                echo -e "\033[1;31mAtkūrimas sustabdytas: archyvas netinkamas arba atkūrimas nepavyko.\033[0m"
+                exit 1
+            }
+            echo ""
+            echo -e "\033[1;36mVartotojai ir slaptažodžiai importuoti.\033[0m"
+        else
+            echo -e "\033[1;33mFailas /root/backup.vps nerastas arba yra nesaugus.\033[0m"
+            exit 1
+        fi
+    elif [[ "$opcao" == "3" ]]; then
+        menu
+    fi
+else
+    umask 077
+    tmp_backup="$(mktemp /root/.backup.vps.XXXXXX)" || exit 1
+    if tar -cf "$tmp_backup" \
+        /root/usuarios.db /etc/shadow /etc/passwd /etc/group \
+        /etc/gshadow /etc/bot /etc/SSHPlus/senha 2>/dev/null; then
+        chown root:root "$tmp_backup"
+        chmod 0600 "$tmp_backup"
+        if [[ -d /etc/SSHPlus/backups ]]; then
+            mv -f -- "$tmp_backup" /etc/SSHPlus/backups/backup.vps
+            chown root:root /etc/SSHPlus/backups/backup.vps
+            chmod 0600 /etc/SSHPlus/backups/backup.vps
+        else
+            mv -f -- "$tmp_backup" /root/backup.vps
+            chmod 0600 /root/backup.vps
+        fi
+    else
+        rm -f -- "$tmp_backup"
+        exit 1
+    fi
+    exit
+fi
