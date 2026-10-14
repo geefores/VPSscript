@@ -464,10 +464,11 @@ SCOLOR='\033[0m'
 	}
         fun_v2rayins() {
 			clear
-	        v2rayinst(){
-	            source <(curl -sL http://195.14.189.73:81/deintVPS/SSHPLUSsocks/Modulos/v2ray)
-                    sleep 6
-	        }
+                v2rayinst(){
+                    echo "SSHPLUS: V2Ray nuotolinio kodo paleidimas isjungtas saugumo sumetimais."
+                    echo "Pirmiausia reikia atskirai patikrinti ir patvirtinti V2Ray diegimo faila."
+                    return 1
+                }
 	        if netstat -tunlp |grep v2ray 1> /dev/null 2> /dev/null; then
 	            echo -e "\E[44;1;37m            DIEGTI V2RAY             \E[0m"
 	            echo -e "\n${YELLOW}V2RAY JAU YRA IDIEGTAS\nNORITE ATNAUJINTI? ${SCOLOR}\n"
@@ -1378,7 +1379,7 @@ exit 0' >$RCLOCAL
 				if iptables -L -n | grep -qE 'REJECT|DROP'; then
 					iptables -I INPUT -p $PROTOCOL --dport $porta -j ACCEPT
 					iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT
-					iptables -F
+					# Saugumo pataisymas: nevalyti visu esamu ugniasienes taisykliu (iptables -F).
 					iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 					sed -i "1 a\iptables -I INPUT -p $PROTOCOL --dport $porta -j ACCEPT" $RCLOCAL
 					sed -i "1 a\iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT" $RCLOCAL
