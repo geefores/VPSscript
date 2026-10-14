@@ -219,7 +219,17 @@ _ons=$(ps -x | grep sshd | grep -v root | grep priv | wc -l)
 _onli=$(($_ons + $_onop + $_ondrp))
 _ram=$(printf ' %-9s' "$(free -h | grep -i mem | awk {'print $2'})")
 _usor=$(printf '%-8s' "$(free -m | awk 'NR==2{printf "%.2f%%", $3*100/$2 }')")
-_usop=$(printf '%-1s' "$(top -bn1 | awk '/Cpu/ { cpu = "" 100 - $8 "%" }; END { print cpu }')")
+# CPU skaičiuojamas pagal du /proc/stat mėginius; top išvesties formatas skiriasi tarp sistemų.
+_cpu1=$(awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8+$9+$10+$11, $5+$6; exit}' /proc/stat)
+sleep 0.2
+_cpu2=$(awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8+$9+$10+$11, $5+$6; exit}' /proc/stat)
+read -r _total1 _idle1 <<EOF_CPU1
+$_cpu1
+EOF_CPU1
+read -r _total2 _idle2 <<EOF_CPU2
+$_cpu2
+EOF_CPU2
+_usop=$(awk -v t1="$_total1" -v i1="$_idle1" -v t2="$_total2" -v i2="$_idle2" 'BEGIN { dt=t2-t1; di=i2-i1; if (dt>0) {v=(dt-di)*100/dt; if(v<0)v=0; if(v>100)v=100; printf "%.1f%%",v} else printf "n/a" }')
 _core=$(printf '%-1s' "$(grep -c cpu[0-9] /proc/stat)")
 _system=$(printf '%-14s' "$system")
 _hora=$(printf '%(%H:%M:%S)T')
@@ -337,7 +347,17 @@ _ons=$(ps -x | grep sshd | grep -v root | grep priv | wc -l)
 _onli=$(($_ons + $_onop + $_ondrp))
 _ram=$(printf ' %-9s' "$(free -h | grep -i mem | awk {'print $2'})")
 _usor=$(printf '%-8s' "$(free -m | awk 'NR==2{printf "%.2f%%", $3*100/$2 }')")
-_usop=$(printf '%-1s' "$(top -bn1 | awk '/Cpu/ { cpu = "" 100 - $8 "%" }; END { print cpu }')")
+# CPU skaičiuojamas pagal du /proc/stat mėginius; top išvesties formatas skiriasi tarp sistemų.
+_cpu1=$(awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8+$9+$10+$11, $5+$6; exit}' /proc/stat)
+sleep 0.2
+_cpu2=$(awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8+$9+$10+$11, $5+$6; exit}' /proc/stat)
+read -r _total1 _idle1 <<EOF_CPU1
+$_cpu1
+EOF_CPU1
+read -r _total2 _idle2 <<EOF_CPU2
+$_cpu2
+EOF_CPU2
+_usop=$(awk -v t1="$_total1" -v i1="$_idle1" -v t2="$_total2" -v i2="$_idle2" 'BEGIN { dt=t2-t1; di=i2-i1; if (dt>0) {v=(dt-di)*100/dt; if(v<0)v=0; if(v>100)v=100; printf "%.1f%%",v} else printf "n/a" }')
 _core=$(printf '%-1s' "$(grep -c cpu[0-9] /proc/stat)")
 _system=$(printf '%-14s' "$system")
 _hora=$(printf '%(%H:%M:%S)T')
@@ -346,6 +366,7 @@ _userexp=$(printf '%-5s' "$_expuser")
 _tuser=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)
 clear
 # MOBILE MENU FIX 2026-10-15 TWO-LINE BLOCKS / NO PROCESS PID LIST
+# MOBILE MENU FIX 2026-10-15 CPU SAMPLE / CENTERED HEADER
 # Kompaktiškas meniu telefonui: informacijos blokai po dvi eilutes.
 _cols=$(tput cols 2>/dev/null || stty size 2>/dev/null | awk '{print $2}' || echo 40)
 case "$_cols" in ''|*[!0-9]*) _cols=40 ;; esac
@@ -377,8 +398,14 @@ _short_methods=$(printf '%s' "$_methods" | cut -c1-22)
 
 clear
 printf '\033[1;36m+%s+\033[0m\n' "$_line"
-printf '\033[1;36m|\033[1;37m%*s\033[0m\033[1;36m|\033[0m\n' "$(( (_inner + 18) / 2 ))" 'SSHPLUS MANAGER'
-printf '\033[1;36m|\033[0;37m%*s\033[0m\033[1;36m|\033[0m\n' "$(( (_inner + 12) / 2 ))" 'DEINTERNET VPS GROUP'
+_center_line() {
+  local _text="$1" _left _right
+  _left=$(( (_inner - ${#_text}) / 2 ))
+  _right=$((_inner - ${#_text} - _left))
+  printf '\033[1;36m|\033[1;37m%*s%s%*s\033[0m\033[1;36m|\033[0m\n' "$_left" '' "$_text" "$_right" ''
+}
+_center_line 'SSHPLUS MANAGER'
+_center_line 'DEINTERNET VPS GROUP'
 printf '\033[1;36m+%s+\033[0m\n' "$_line"
 
 printf '\033[1;34m+-- SISTEMA %s+\033[0m\n' "$(printf '%*s' "$((_inner - 11))" '' | tr ' ' '-')"
