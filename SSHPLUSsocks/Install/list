@@ -1,88 +1,144 @@
-#!/bin/bash
-#====================================================
-#	@deinternet
-#====================================================
-_lvk=$(wget -qO- http://195.14.189.73:81/deintVPS/SSHPLUSsocks/Sistema/versao)
-IP=$(wget -qO- ipv4.icanhazip.com)
-IP2=$(wget -qO- http://whatismyip.akamai.com/)
-[[ "$IP" != "$IP2" ]] && ipdovps="$IP2" || ipdovps="$IP"
-echo -e "$ipdovps" >/etc/IP
-lst=$1 && lst1=$2 && lst2=$3 && key1=$4 && key2=crz
-echo -e "America/Sao_Paulo" >/etc/timezone
-ln -fs /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime >/dev/null 2>&1
-dpkg-reconfigure --frontend noninteractive tzdata >/dev/null 2>&1
-[[ -z $lst1 ]] && {
-	rm -rf $_Ink/list >/dev/null 2>&1 && cat /dev/null >~/.bash_history && history -c && exit 0
+#!/usr/bin/env bash
+# SSHPLUS installer module for Ubuntu 24.04 LTS.
+# Keeps the original repository directory layout and the legacy argument contract.
+set -Eeuo pipefail
+umask 027
+
+readonly REPO_RAW="https://raw.githubusercontent.com/geefores/VPSscript/main/SSHPLUSsocks"
+readonly MODULES_URL="${REPO_RAW}/Modulos"
+readonly INSTALL_URL="${REPO_RAW}/Install"
+readonly BACKUP_ROOT="/var/backups/sshplus-install"
+
+# Legacy arguments supplied by SSHPLUSsocks/Plus.
+lst="${1:-}"
+lst1="${2:-}"
+lst2="${3:-/usr/lib}"
+key1="${4:-}"
+key2="crz"
+
+log() { printf '[SSHPLUS] %s\n' "$*"; }
+die() { printf '[SSHPLUS] KLAIDA: %s\n' "$*" >&2; exit 1; }
+
+[[ "${EUID}" -eq 0 ]] || die "Paleiskite kaip root (sudo)."
+[[ -r /etc/os-release ]] || die "Nepavyko nustatyti operacinės sistemos."
+# shellcheck disable=SC1091
+. /etc/os-release
+[[ "${ID:-}" == "ubuntu" && "${VERSION_ID:-}" == "24.04" ]] || die "Šis diegimo modulis skirtas Ubuntu 24.04 LTS."
+command -v curl >/dev/null 2>&1 || die "Trūksta curl. Įdiekite: apt-get install -y curl ca-certificates"
+
+# The original Plus script calls this file once to validate/download modules.
+# If called without its normal arguments, do not erase files or shell history.
+if [[ -z "$lst1" ]]; then
+  log "Trūksta privalomų argumentų; niekas nebuvo ištrinta."
+  exit 2
+fi
+
+install -d -m 0750 \
+  /etc/SSHPlus/v2ray \
+  /etc/SSHPlus/senha \
+  /etc/SSHPlus/userteste \
+  /etc/SSHPlus/.tmp \
+  /etc/bot/info-users \
+  /etc/bot/arquivos \
+  /etc/bot/revenda \
+  /etc/bot/suspensos
+install -d -m 0750 "$BACKUP_ROOT"
+: >> /etc/SSHPlus/Exp
+: >> /etc/bot/lista_ativos
+: >> /etc/bot/lista_suspensos
+
+# Keep a recoverable copy of files this installer is about to replace.
+backup_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+backup_dir="${BACKUP_ROOT}/${backup_stamp}"
+install -d -m 0700 "$backup_dir"
+
+backup_if_exists() {
+  local path="$1" rel
+  [[ -e "$path" || -L "$path" ]] || return 0
+  rel="${path#/}"
+  install -d -m 0700 "${backup_dir}/$(dirname "$rel")"
+  cp -a -- "$path" "${backup_dir}/${rel}"
 }
-[[ ! -d /etc/SSHPlus ]] && mkdir /etc/SSHPlus
-[[ ! -d /etc/SSHPlus/v2ray ]] && mkdir /etc/SSHPlus/v2ray
-[[ ! -d /etc/SSHPlus/senha ]] && mkdir /etc/SSHPlus/senha
-[[ ! -e /etc/SSHPlus/Exp ]] && touch /etc/SSHPlus/Exp
-[[ ! -d /etc/SSHPlus/userteste ]] && mkdir /etc/SSHPlus/userteste
-[[ ! -d /etc/SSHPlus/.tmp ]] && mkdir /etc/SSHPlus/.tmp
-[[ ! -d /etc/bot ]] && mkdir /etc/bot
-[[ ! -d /etc/bot/info-users ]] && mkdir /etc/bot/info-users
-[[ ! -d /etc/bot/arquivos ]] && mkdir /etc/bot/arquivos
-[[ ! -d /etc/bot/revenda ]] && mkdir /etc/bot/revenda
-[[ ! -d /etc/bot/suspensos ]] && mkdir /etc/bot/suspensos
-[[ ! -e /etc/bot/lista_ativos ]] && touch /etc/bot/lista_ativos
-[[ ! -e /etc/bot/lista_suspensos ]] && touch /etc/bot/lista_suspensos
-echo -e 'by: @KIRITO_SSH' >/usr/lib/sshplus && cat /usr/lib/sshplus >$lst2/licence && cat /usr/lib/sshplus > /etc/SSHPlus/.tmp/crazy
-netstat -nplt | grep -w 'apache2' | grep -w '80' && sed -i "s/Listen 80/Listen 81/g" /etc/apache2/ports.conf && service apache2 restart
-[[ "$(grep -o '#Port 22' /etc/ssh/sshd_config)" == "#Port 22" ]] && sed -i "s;#Port 22;Port 22;" /etc/ssh/sshd_config && service ssh restart
-grep -v "^PasswordAuthentication" /etc/ssh/sshd_config >/tmp/passlogin && mv /tmp/passlogin /etc/ssh/sshd_config
-echo "PasswordAuthentication yes" >>/etc/ssh/sshd_config
-_dir1='/bin'
-_dir2='/etc/SSHPlus'
-rm $_dir2/ShellBot.sh $_dir2/cabecalho $_dir2/open.py $_dir2/proxy.py $_dir2/wsproxy.py >/dev/null 2>&1
-_mdls=("addhost" "delhost" "alterarsenha" "criarusuario" "expcleaner" "mudardata" "remover" "criarteste" "verifbot" "droplimiter" "alterarlimite" "ajuda" "sshmonitor" "badvpn" "userbackup" "instsqd" "blockt" "otimizar" "menu" "speedtest" "banner" "senharoot" "reiniciarservicos" "reiniciarsistema" "attscript" "conexao" "delscript" "detalhes" "botssh" "infousers" "verifatt" "limiter" "uexpired" "cabecalho" "bot" "open.py" "slow_dns" "proxy.py" "wsproxy.py" "trojan-go" "botteste" "onlineapp")
-for _arq in ${_mdls[@]}; do
-	[[ -e $_dir1/$_arq ]] && rm $_dir1/$_arq >/dev/null 2>&1
-	wget -c -P $_dir1 http://195.14.189.73:81/deintVPS/SSHPLUSsocks/Modulos/$_arq
-	chmod +x $_dir1/$_arq
-done
-mv $_dir1/cabecalho $_dir1/bot $_dir1/open.py $_dir1/proxy.py $_dir1/wsproxy.py $_dir2
-_arq_host="/etc/hosts"
-_host[0]="d1n212ccp6ldpw.cloudfront.net"
-_host[1]="dns.whatsapp.net"
-_host[2]="portalrecarga.vivo.com.br/recarga"
-_host[3]="navegue.vivo.com.br/controle/"
-_host[4]="navegue.vivo.com.br/pre/"
-_host[5]="www.whatsapp.net"
-_host[6]="/SSHPLUS?"
-for host in ${_host[@]}; do
-	if [[ "$(grep -w "$host" $_arq_host | wc -l)" = "0" ]]; then
-		sed -i "3i\127.0.0.1 $host" $_arq_host
-	fi
-done
-[[ ! -e /etc/autostart ]] && {
-	echo '#!/bin/bash
-clear
-#INICIO AUTOMATICO' >/etc/autostart
-	chmod +x /etc/autostart
-} || {
-	[[ $(ps x | grep "bot_plus" | grep -v grep | wc -l) != '0' ]] && wget -qO- http://195.14.189.73:81/deintVPS/SSHPLUSsocks/Install/ShellBot.sh
-	for proc in $(ps x | grep 'dmS' | grep -v 'grep' | awk {'print $1'}); do
-		screen -r -S "$proc" -X quit	
-done
-	screen -wipe >/dev/null
-	echo '#!/bin/bash
-clear
-#INICIO AUTOMATICO' >/etc/autostart
-	chmod +x /etc/autostart
+
+fetch_to_path() {
+  local name="$1" destination="$2" mode="${3:-0755}" tmp
+  tmp="$(mktemp)"
+  if ! curl --fail --location --silent --show-error --retry 2 --connect-timeout 10 \
+      "${MODULES_URL}/${name}" -o "$tmp"; then
+    rm -f -- "$tmp"
+    die "Nepavyko atsisiųsti GitHub failo: SSHPLUSsocks/Modulos/${name}. Esami failai palikti nepakeisti."
+  fi
+  [[ -s "$tmp" ]] || { rm -f -- "$tmp"; die "GitHub grąžino tuščią failą: ${name}"; }
+  backup_if_exists "$destination"
+  install -D -m "$mode" "$tmp" "$destination"
+  rm -f -- "$tmp"
 }
-crontab -r >/dev/null 2>&1
-(
-	crontab -l 2>/dev/null
-	echo "@daily /bin/verifatt"
-	echo "@reboot /etc/autostart"
-	echo "* * * * * /etc/autostart"
-	echo "0 */6 * * * /bin/uexpired"
-) | crontab -
-echo "$_lvk" | sed -n '1 p' | cut -d' ' -f2 >/bin/versao && cat /bin/versao >/home/sshplus
-wget http://195.14.189.73:81/deintVPS/SSHPLUSsocks/Install/jq-linux64 >/dev/null 2>&1
-chmod +x jq-linux64 && mv jq-linux64 $(which jq)
-service cron restart >/dev/null 2>&1
-service ssh restart >/dev/null 2>&1
-[[ -d /var/www/html/openvpn ]] && service apache2 restart >/dev/null 2>&1
-rm -rf $lst1/list >/dev/null 2>&1
+
+# Preserve the legacy marker files used by existing modules.
+printf '%s\n' 'by: @DEINTERNET' > /usr/lib/sshplus
+install -m 0640 /usr/lib/sshplus "${lst2%/}/licence"
+install -m 0640 /usr/lib/sshplus /etc/SSHPlus/.tmp/crazy
+
+# Public IP is optional metadata. Do not contact the old HTTP host.
+if public_ip="$(curl --fail --location --silent --show-error --connect-timeout 5 https://api.ipify.org 2>/dev/null)" \
+   && [[ "$public_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+  printf '%s\n' "$public_ip" > /etc/IP
+fi
+
+# Download module files from this GitHub repository over HTTPS.
+modules=(
+  ShellBot.sh addhost delhost alterarsenha criarusuario expcleaner mudardata remover
+  criarteste verifbot droplimiter alterarlimite ajuda sshmonitor badvpn
+  userbackup instsqd blockt otimizar menu speedtest banner senharoot
+  reiniciarservicos reiniciarsistema attscript conexao delscript detalhes
+  botssh infousers verifatt limiter uexpired cabecalho bot open.py slow_dns
+  proxy.py wsproxy.py trojan-go botteste onlineapp
+)
+
+for module in "${modules[@]}"; do
+  case "$module" in
+    ShellBot.sh|cabecalho|bot|open.py|proxy.py|wsproxy.py)
+      destination="/etc/SSHPlus/${module}"
+      ;;
+    *)
+      destination="/bin/${module}"
+      ;;
+  esac
+  fetch_to_path "$module" "$destination" 0755
+  log "Įdiegtas modulis: ${module}"
+done
+
+# Version metadata from the same repository; it is not executable code.
+version_tmp="$(mktemp)"
+if curl --fail --location --silent --show-error --retry 2 \
+    "${INSTALL_URL}/versao" -o "$version_tmp" && [[ -s "$version_tmp" ]]; then
+  backup_if_exists /bin/versao
+  install -m 0644 "$version_tmp" /bin/versao
+  install -m 0644 "$version_tmp" /home/sshplus
+fi
+rm -f -- "$version_tmp"
+
+# Create autostart only when absent; never overwrite a user's existing file.
+if [[ ! -e /etc/autostart ]]; then
+  cat > /etc/autostart <<'AUTOSTART_EOF'
+#!/usr/bin/env bash
+# SSHPLUS automatinio paleidimo failas. Moduliai gali papildyti šį failą.
+AUTOSTART_EOF
+  chmod 0750 /etc/autostart
+fi
+
+# Preserve unrelated cron jobs and replace only SSHPLUS-managed entries.
+current_cron="$(mktemp)"
+new_cron="$(mktemp)"
+crontab -l 2>/dev/null > "$current_cron" || true
+awk '!($0 == "@daily /bin/verifatt" || $0 == "@reboot /etc/autostart" || $0 == "* * * * * /etc/autostart" || $0 == "0 */6 * * * /bin/uexpired")' "$current_cron" > "$new_cron" || true
+{
+  cat "$new_cron"
+  printf '%s\n' '@daily /bin/verifatt' '@reboot /etc/autostart' '0 */6 * * * /bin/uexpired'
+} | awk '!seen[$0]++' | crontab -
+rm -f -- "$current_cron" "$new_cron"
+
+# Do not modify /etc/hosts, timezone, sshd_config, firewall rules, unrelated
+# screen sessions, system-wide jq binary, shell history, or unrelated cron jobs.
+log "Diegimo modulių paruošimas baigtas."
+log "Atsarginės kopijos (jei failai buvo pakeisti): ${backup_dir}"
