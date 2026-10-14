@@ -435,10 +435,9 @@ SCOLOR='\033[0m'
 				echo -e "\033[1;32mKONFIGURUOJAMAS DROPBEAR PORTAS!\033[0m"
 				echo ""
 				fun_bar 'fun_ports'
-				# Saugumas: nekeisti SSH slaptažodinio prisijungimo politikos automatiškai.
-				# Esama /etc/ssh/sshd_config konfigūracija paliekama nepakeista.
-				grep -v "^PermitTunnel yes" /etc/ssh/sshd_config >/tmp/ssh && mv /tmp/ssh /etc/ssh/sshd_config
-				echo "PermitTunnel yes" >>/etc/ssh/sshd_config
+				# Dropbear veikimui nereikia keisti OpenSSH sshd_config.
+				# Paliekame esamą SSH konfigūraciją nepakeistą, kad nepažeistume
+				# aktyvių OpenSSH nustatymų ar nuotolinės prieigos.
 				echo ""
 				echo -e "\033[1;32mBAIGIAMAS DROPBEAR DIEGIMAS !\033[0m"
 				echo ""
