@@ -345,50 +345,58 @@ _onlin=$(printf '%-5s' "$_onli")
 _userexp=$(printf '%-5s' "$_expuser")
 _tuser=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)
 clear
-# MOBILE MENU FIX 2026-10-15 NO PROCESS PID LIST
-# Telefonui pritaikytas meniu: dviejų stulpelių pagrindinis meniu.
-# Ribojame plotį, nes kai kurios mobilios SSH programos neteisingai praneša terminalo dydį.
+# MOBILE MENU FIX 2026-10-15 TWO-LINE BLOCKS / NO PROCESS PID LIST
+# Kompaktiškas meniu telefonui: informacijos blokai po dvi eilutes.
 _cols=$(tput cols 2>/dev/null || stty size 2>/dev/null | awk '{print $2}' || echo 40)
 case "$_cols" in ''|*[!0-9]*) _cols=40 ;; esac
 [ "$_cols" -ge 32 ] || _cols=32
 [ "$_cols" -le 44 ] || _cols=44
 _inner=$((_cols - 2))
-_line=$(printf '%*s' "$_inner" '' 2>/dev/null | tr ' ' '-')
+_line=$(printf '%*s' "$_inner" '' | tr ' ' '-')
+_content=$((_inner - 2))
 
-# Klausantys portai; procesų PID nerodome, kaip prašyta.
 _tcp_list=$(ss -H -lnt 2>/dev/null | awk '{n=split($4,a,":"); if(a[n] ~ /^[0-9]+$/) print a[n]}' | sort -nu | paste -sd, -)
 _udp_list=$(ss -H -lnu 2>/dev/null | awk '{n=split($5,a,":"); if(a[n] ~ /^[0-9]+$/) print a[n]}' | sort -nu | paste -sd, -)
 [ -n "$_tcp_list" ] || _tcp_list="nėra"
 [ -n "$_udp_list" ] || _udp_list="nėra"
 
-# Veikiančios susijusios paslaugos (systemd), ne procesų sąrašas.
+# Rodome tik veikiančių systemd paslaugų pavadinimus; PID ir procesų sąrašo nėra.
 _methods=$(for svc in ssh sshd dropbear openvpn openvpn-server@server-tcp-1194 openvpn-server@server-udp-2200 xray stunnel5 strongswan-starter slowdns noobzvpns udp-custom; do
   state=$(systemctl is-active "$svc" 2>/dev/null || true)
   [ "$state" = active ] && printf '%s ' "$svc"
-done)
-[ -n "$_methods" ] || _methods="nerasta"
+done | xargs)
+[ -n "$_methods" ] || _methods="nėra"
+
+# Trumpiname ilgus sąrašus, kad kiekvienas informacijos blokas liktų dviejų eilučių.
+_short_tcp=$(printf '%s' "$_tcp_list" | cut -c1-24)
+[ "${#_tcp_list}" -le 24 ] || _short_tcp="${_short_tcp}…"
+_short_udp=$(printf '%s' "$_udp_list" | cut -c1-12)
+[ "${#_udp_list}" -le 12 ] || _short_udp="${_short_udp}…"
+_short_methods=$(printf '%s' "$_methods" | cut -c1-22)
+[ "${#_methods}" -le 22 ] || _short_methods="${_short_methods}…"
 
 clear
 printf '\033[1;36m+%s+\033[0m\n' "$_line"
 printf '\033[1;36m|\033[1;37m%*s\033[0m\033[1;36m|\033[0m\n' "$(( (_inner + 18) / 2 ))" 'SSHPLUS MANAGER'
 printf '\033[1;36m|\033[0;37m%*s\033[0m\033[1;36m|\033[0m\n' "$(( (_inner + 12) / 2 ))" 'DEINTERNET VPS GROUP'
 printf '\033[1;36m+%s+\033[0m\n' "$_line"
+
 printf '\033[1;34m+-- SISTEMA %s+\033[0m\n' "$(printf '%*s' "$((_inner - 11))" '' | tr ' ' '-')"
-printf ' OS: %s\n' "$_system"
-printf ' Laikas: %s | CPU: %s\n' "$_hora" "$_usop"
-printf ' CPU branduoliai: %s\n' "$_core"
-printf ' RAM: %s | Naudojama: %s\n' "$_ram" "$_usor"
+printf ' OS: %s | Laikas: %s\n' "$_system" "${_hora%:*}"
+printf ' CPU %s | Brand. %s | RAM %s %s\n' "$_usop" "$_core" "$_ram" "$_usor"
 printf '\033[1;34m+%s+\033[0m\n' "$_line"
+
 printf '\033[1;32m+-- VARTOTOJAI %s+\033[0m\n' "$(printf '%*s' "$((_inner - 14))" '' | tr ' ' '-')"
-printf ' Prisijungę: %s\n' "$_onlin"
-printf ' Pasibaigę: %s | Iš viso: %s\n' "$_userexp" "$_tuser"
+printf ' Prisijungę: %s | Pasibaigę: %s\n' "$_onlin" "$_userexp"
+printf ' Iš viso vartotojų: %s\n' "$_tuser"
 printf '\033[1;32m+%s+\033[0m\n' "$_line"
+
 printf '\033[1;33m+-- SERVERIS %s+\033[0m\n' "$(printf '%*s' "$((_inner - 10))" '' | tr ' ' '-')"
-printf ' SSH: %s\n' "$(systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null || echo unknown)"
-printf ' TCP portai:\n'; printf '%s\n' "$_tcp_list" | fold -s -w "$((_inner - 2))" | sed 's/^/  /'
-printf ' UDP portai:\n'; printf '%s\n' "$_udp_list" | fold -s -w "$((_inner - 2))" | sed 's/^/  /'
-printf ' Veikia:\n'; printf '%s\n' "$_methods" | fold -s -w "$((_inner - 2))" | sed 's/^/  /'
+_ssh_state=$(systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null || echo unknown)
+printf ' SSH: %s | TCP: %s\n' "$_ssh_state" "$_short_tcp"
+printf ' UDP: %s | Veikia: %s\n' "$_short_udp" "$_short_methods"
 printf '\033[1;33m+%s+\033[0m\n' "$_line"
+
 printf '\033[1;36m+-- PAGRINDINIS MENIU %s+\033[0m\n' "$(printf '%*s' "$((_inner - 21))" '' | tr ' ' '-')"
 printf ' [01] Kurti     [11] Speedtest\n'
 printf ' [02] Bandomas  [12] Banneris\n'
