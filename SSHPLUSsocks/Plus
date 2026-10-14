@@ -93,10 +93,22 @@ rm versao* > /dev/null 2>&1
 wget -qO "${HOME}/versao" "${GITHUB_INSTALL}/versao" >/dev/null 2>&1 || true
 # Removed third-party IP-logger request; it is unrelated to installation.
 cd /bin/ > /dev/null 2>&1
-rm v2raymanager > /dev/null 2>&1
-wget -qO /bin/v2raymanager "${GITHUB_MODULES}/v2raymanager"
-chmod 755 /bin/v2raymanager > /dev/null 2>&1
-cd > /dev/null 2>&1
+rm -f /bin/v2raymanager
+if ! wget -qO /bin/v2raymanager "${GITHUB_MODULES}/v2raymanager"; then
+  echo "Klaida: nepavyko atsisiusti v2raymanager modulio; diegimas nutrauktas." >&2
+  rm -f /bin/v2raymanager
+  exit 1
+fi
+if [[ ! -s /bin/v2raymanager ]]; then
+  echo "Klaida: v2raymanager failas tuscias; diegimas nutrauktas." >&2
+  rm -f /bin/v2raymanager
+  exit 1
+fi
+chmod 755 /bin/v2raymanager || {
+  echo "Klaida: nepavyko nustatyti v2raymanager teisiu." >&2
+  exit 1
+}
+cd "$HOME" || exit 1
 #-----------------------------------------------------------------------------------------------------------------
 echo -e "\n\033[1;32mRAKTAS SUGENERUOTAS IR PATVIRTINIAS!\033[1;32m"
 sleep 1s
@@ -128,11 +140,14 @@ echo ""
 echo -e "    \033[1;33mVPS ATNAUJINIAI UZTRUNKIA, PALAUKITE!\033[0m"
 echo ""
 fun_attlist () {
-apt-get update -y
-[[ ! -d /usr/share/.plus ]] && mkdir /usr/share/.plus
-echo "crz: $(date)" > /usr/share/.plus/.plus
+  apt-get update -y || return 1
+  install -d -m 0755 /usr/share/.plus || return 1
+  printf 'crz: %s\n' "$(date)" > /usr/share/.plus/.plus || return 1
 }
-fun_bar 'fun_attlist'
+if ! fun_attlist; then
+  echo "Klaida: sistemos paketu indeksu atnaujinti nepavyko. Diegimas sustabdytas." >&2
+  exit 1
+fi
 clear
 echo ""
 echo -e "          \033[1;33m[\033[1;31m!\033[1;33m] \033[1;32mVYKSTA PAKETU DIEGIMAS \033[1;33m[\033[1;31m!\033[1;33m] \033[0m"
@@ -140,16 +155,22 @@ echo ""
 echo -e "\033[1;33mKAI KURIE PAKETAI YPAC REIKALINGI !\033[0m"
 echo ""
 inst_pct () {
-_pacotes=("bc" "screen" "nano" "unzip" "lsof" "net-tools" "dos2unix" "nload" "jq" "curl" "figlet" "python3" "python3-pip" "python3-venv" "ca-certificates" "git")
-for _prog in ${_pacotes[@]}; do
-apt install $_prog -y
-done
-# Ubuntu 24.04 marks the system Python as externally managed (PEP 668).
-python3 -m venv /opt/sshplus-venv
-/opt/sshplus-venv/bin/python -m pip install --upgrade pip
-/opt/sshplus-venv/bin/python -m pip install speedtest-cli
+  local _prog
+  local -a _pacotes=("bc" "screen" "nano" "unzip" "lsof" "net-tools" "dos2unix" "nload" "jq" "curl" "figlet" "python3" "python3-pip" "python3-venv" "ca-certificates" "git")
+  for _prog in "${_pacotes[@]}"; do
+    if ! apt-get install -y "$_prog"; then
+      return 1
+    fi
+  done
+  # Ubuntu 24.04 marks the system Python as externally managed (PEP 668).
+  python3 -m venv /opt/sshplus-venv || return 1
+  /opt/sshplus-venv/bin/python -m pip install --upgrade pip || return 1
+  /opt/sshplus-venv/bin/python -m pip install speedtest-cli || return 1
 }
-fun_bar 'inst_pct'
+if ! inst_pct; then
+  echo "Klaida: priklausomybiu arba Python aplinkos diegimas nepavyko. Diegimas sustabdytas." >&2
+  exit 1
+fi
 if command -v ufw >/dev/null 2>&1; then
   ufw allow 443/tcp
   ufw allow 80/tcp
@@ -163,7 +184,11 @@ echo -e "              \033[1;33m[\033[1;31m!\033[1;33m] \033[1;32mBAIGIAMAS SKR
 echo ""
 echo -e "      \033[1;33mFUNKCIJU UZBAIGIMAS IR APIBREZIMAI! \033[0m"
 echo ""
-fun_bar "$_Ink/list $_lnk $_Ink $_1nk $key"
+if ! "$_Ink/list" "$_lnk" "$_Ink" "$_1nk" "${key:-}"; then
+  echo "Klaida: SSHPLUS moduliu paruosimas nepavyko. Diegimas nepatvirtintas." >&2
+  echo "Patikrinkite pranesimus auksciau ir atsargines kopijas /var/backups/sshplus-install." >&2
+  exit 1
+fi
 clear
 echo ""
 cd $HOME
