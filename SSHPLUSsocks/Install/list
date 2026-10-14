@@ -88,6 +88,7 @@ fi
 # Download module files from this GitHub repository over HTTPS.
 modules=(
   ShellBot.sh addhost delhost alterarsenha criarusuario expcleaner mudardata remover
+  sshplus-safe-restore
   criarteste verifbot droplimiter alterarlimite ajuda sshmonitor badvpn
   userbackup instsqd blockt otimizar menu speedtest banner senharoot
   reiniciarservicos reiniciarsistema attscript conexao delscript detalhes
