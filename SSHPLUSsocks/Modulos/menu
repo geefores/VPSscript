@@ -4,7 +4,7 @@ comando[0]="$1"
 comando[1]="$2"
  (
 [[ -e $HOME/fim ]] && rm $HOME/fim
-[[ ! -e /usr/lib/sshplus ]] && rm -rf /bin/menu > /dev/null 2>&1
+# Safety: never delete executables when the SSHPLUS marker is missing.
 ${comando[0]} -y > /dev/null 2>&1
 ${comando[1]} -y > /dev/null 2>&1
 touch $HOME/fim
@@ -36,7 +36,7 @@ comando[0]="$1"
 comando[1]="$2"
  (
 [[ -e $HOME/fim ]] && rm $HOME/fim
-[[ ! -d /etc/SSHPlus ]] && rm -rf /bin/menu
+# Safety: missing configuration must not delete the menu executable.
 ${comando[0]} > /dev/null 2>&1
 ${comando[1]} > /dev/null 2>&1
 touch $HOME/fim
@@ -197,7 +197,10 @@ menu2 (){
 stsbot=$(ps x | grep "bot_plus"|grep -v grep > /dev/null && echo -e "\033[1;32m◉ " || echo -e "\033[1;31m○ ")
 stsbotteste=$(ps x | grep "bot_teste"|grep -v grep > /dev/null && echo -e "\033[1;32m◉ " || echo -e "\033[1;31m○ ")
 autm=$(grep "menu;" /etc/profile > /dev/null && echo -e "\033[1;32m◉ " || echo -e "\033[1;31m○ ")
-[[ ! -e /usr/lib/licence ]] && rm -rf /bin > /dev/null 2>&1
+if [[ ! -e /usr/lib/licence ]]; then
+  echo -e "\033[1;31mKLAIDA: nerastas SSHPLUS licencijos zymeklis (/usr/lib/licence).\033[0m"
+  return 1
+fi
 if [[ "$(grep -c "Ubuntu" /etc/issue.net)" = "1" ]]; then
 system=$(cut -d' ' -f1 /etc/issue.net)
 system+=$(echo ' ')
