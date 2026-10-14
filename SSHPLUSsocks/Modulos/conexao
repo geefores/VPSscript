@@ -1399,8 +1399,12 @@ SCOLOR='\033[0m'
 				  rm -f "$easyrsa_archive"
 				  return 1
 				fi
-				if ! tar -tzf "$easyrsa_archive" >/dev/null 2>&1 || ! tar -tzf "$easyrsa_archive" | grep -q '^EasyRSA-3\.0\.1/'; then
-				  echo "KLAIDA: EasyRSA archyvas netinkamas; OpenVPN diegimas nutrauktas." >&2
+				if ! tar -tzf "$easyrsa_archive" >/dev/null 2>&1 || ! tar -tzf "$easyrsa_archive" | awk '
+				  BEGIN { ok=1; found=0 }
+				  { if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) ok=0; if ($0 ~ /^EasyRSA-3\.0\.1\//) found=1 }
+				  END { exit !(ok && found) }
+				'; then
+				  echo "KLAIDA: EasyRSA archyvas netinkamas arba jame yra nesaugių kelių; OpenVPN diegimas nutrauktas." >&2
 				  rm -f "$easyrsa_archive"
 				  return 1
 				fi
@@ -1408,21 +1412,23 @@ SCOLOR='\033[0m'
 				if [[ -d /etc/openvpn/easy-rsa/ ]]; then
 				  mv /etc/openvpn/easy-rsa "/etc/openvpn/easy-rsa.backup.$(date +%Y%m%d%H%M%S)"
 				fi
-				tar xzf "$easyrsa_archive" -C "$HOME"
-				mv ~/EasyRSA-3.0.1/ /etc/openvpn/
-				mv /etc/openvpn/EasyRSA-3.0.1/ /etc/openvpn/easy-rsa/
-				chown -R root:root /etc/openvpn/easy-rsa/
-				rm -rf ~/EasyRSA-3.0.1.tgz
-				cd /etc/openvpn/easy-rsa/
-				./easyrsa init-pki
-				./easyrsa --batch build-ca nopass
-				./easyrsa gen-dh
-				./easyrsa build-server-full server nopass
-				./easyrsa build-client-full SSHPLUS nopass
-				./easyrsa gen-crl
-				cp pki/ca.crt pki/private/ca.key pki/dh.pem pki/issued/server.crt pki/private/server.key /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn
-				chown nobody:$GROUPNAME /etc/openvpn/crl.pem
-				openvpn --genkey secret /etc/openvpn/ta.key
+				if ! tar xzf "$easyrsa_archive" -C "$HOME" || ! mv "$HOME/EasyRSA-3.0.1" /etc/openvpn/ || ! mv /etc/openvpn/EasyRSA-3.0.1 /etc/openvpn/easy-rsa/; then
+				  echo "KLAIDA: EasyRSA archyvo išskleidimas arba perkėlimas nepavyko." >&2
+				  return 1
+				fi
+				chown -R root:root /etc/openvpn/easy-rsa/ || return 1
+				rm -f "$easyrsa_archive"
+				cd /etc/openvpn/easy-rsa/ || return 1
+				if ! ./easyrsa init-pki || ! ./easyrsa --batch build-ca nopass || ! ./easyrsa gen-dh || ! ./easyrsa build-server-full server nopass || ! ./easyrsa build-client-full SSHPLUS nopass || ! ./easyrsa gen-crl; then
+				  echo "KLAIDA: EasyRSA sertifikatų generavimas nepavyko; OpenVPN diegimas nutrauktas." >&2
+				  return 1
+				fi
+				if ! cp pki/ca.crt pki/private/ca.key pki/dh.pem pki/issued/server.crt pki/private/server.key pki/crl.pem /etc/openvpn/; then
+				  echo "KLAIDA: OpenVPN sertifikatų kopijavimas nepavyko." >&2
+				  return 1
+				fi
+				chown nobody:$GROUPNAME /etc/openvpn/crl.pem || return 1
+				openvpn --genkey secret /etc/openvpn/ta.key || return 1
 				# Generando server.conf
 				echo "port $porta
 proto $PROTOCOL
