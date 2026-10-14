@@ -1362,17 +1362,26 @@ SCOLOR='\033[0m'
 				echo -e "\033[1;32mSISTEMOS ATNAUJINIMAS"
 				echo ""
 				fun_attos() {
-					apt-get update-y
+					apt-get update -y
 				}
-				fun_bar 'fun_attos'
+				if ! fun_attos; then
+					echo -e "\n\033[1;31mKLAIDA: apt-get update nepavyko. OpenVPN diegimas nutrauktas.\033[0m"
+					sleep 3
+					fun_conexao
+					return 1
+				fi
 				echo ""
 				echo -e "\033[1;32mPRIKLAUSOMYBIU DIEGIMAS"
 				echo ""
 				fun_instdep() {
-					apt-get install openvpn iptables openssl ca-certificates -y
-					apt-get install zip -y
+					apt-get install openvpn iptables openssl ca-certificates zip -y
 				}
-				fun_bar 'fun_instdep'
+				if ! fun_instdep; then
+					echo -e "\n\033[1;31mKLAIDA: OpenVPN priklausomybių įdiegti nepavyko. Diegimas nutrauktas.\033[0m"
+					sleep 3
+					fun_conexao
+					return 1
+				fi
 			} || {
 				fun_bar 'yum install epel-release -y'
 				fun_bar 'yum install openvpn iptables openssl wget ca-certificates -y'
