@@ -2170,14 +2170,9 @@ exit 0' >$RCLOCAL
 				return
 			fi
 
-			port_count=$(grep -Ec '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config || true)
-			if (( port_count <= 1 )); then
-				echo -e "\n\033[1;31mPaskutinio aiškiai nurodyto SSH prievado šalinti negalima.\033[0m"
-				echo "Tai galėtų grąžinti numatytąjį 22 prievadą."
-				sleep 3
-				fun_conexao
-				return
-			fi
+			# Galima pašalinti ir paskutinį aiškų Port įrašą: OpenSSH tada
+			# grįžta prie numatytojo 22 prievado. Dabartinės SSH sesijos
+			# prievadas jau patikrintas aukščiau; po pakeitimo tikrinama sshd sintaksė.
 
 			if ! ssh_config_backup; then
 				sleep 2
