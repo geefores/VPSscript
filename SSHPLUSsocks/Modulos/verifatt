@@ -1,9 +1,19 @@
 #!/bin/bash
-clear
-[[ -e /home/versao ]] && rm /home/versao
-wget -P /home http://ssh-plus.tk/script/versao > /dev/null 2>&1
-[[ -f "/home/versao" ]] && {
-	vrs1=$(sed -n '1 p' /bin/versao| sed -e 's/[^0-9]//ig')
-    vrs2=$(sed -n '1 p' /home/versao | sed -e 's/[^0-9]//ig')
-	[[ "$vrs1" != "$vrs2" ]] && mv /home/versao /tmp/att
-}
+# Read-only version check using the official repository over HTTPS.
+BASE_URL="https://raw.githubusercontent.com/geefores/VPSscript/main/SSHPLUSsocks/Install/versao"
+TMP_VERSION="$(mktemp /tmp/sshplus-verifatt.XXXXXX)" || exit 1
+trap 'rm -f "$TMP_VERSION"' EXIT
+
+[[ -s /bin/versao ]] || exit 0
+command -v curl >/dev/null 2>&1 || exit 0
+curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+  --connect-timeout 8 --max-time 20 "$BASE_URL" -o "$TMP_VERSION" || exit 0
+[[ -s "$TMP_VERSION" ]] || exit 0
+
+local_version="$(sed -n '1p' /bin/versao | tr -cd '0-9')"
+remote_version="$(sed -n '1p' "$TMP_VERSION" | tr -cd '0-9')"
+[[ -n "$local_version" && -n "$remote_version" ]] || exit 0
+
+if [[ "$local_version" != "$remote_version" ]]; then
+  install -m 600 "$TMP_VERSION" /tmp/att
+fi
