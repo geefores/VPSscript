@@ -2172,11 +2172,23 @@ exit 0' >$RCLOCAL
 
 			port_count=$(grep -Ec '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config || true)
 			if (( port_count <= 1 )); then
-				echo -e "\n\033[1;31mPaskutinio aiškiai nurodyto SSH prievado šalinti negalima.\033[0m"
-				echo "Tai galėtų grąžinti numatytąjį 22 prievadą."
-				sleep 3
-				fun_conexao
-				return
+				# Paskutinį aiškų Port įrašą galima šalinti tik tada, kai numatytasis 22
+				# jau realiai klausomas ir šalinamas prievadas nėra aktyvus klausomas SSH portas.
+				default_ssh_active=0
+				if command -v ss >/dev/null 2>&1 && ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq '(^|[.:])22$'; then
+					default_ssh_active=1
+				fi
+				remove_port_active=0
+				if command -v ss >/dev/null 2>&1 && ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|[.:])${pt_num}$"; then
+					remove_port_active=1
+				fi
+				if (( pt_num == 22 || default_ssh_active == 0 || remove_port_active == 1 )); then
+					echo -e "\n\033[1;31mPaskutinio aiškiai nurodyto SSH prievado šalinti negalima, nes saugus numatytasis 22 prievadas nepatvirtintas.\033[0m"
+					echo "Patikrinkite, kad 22 prievadas aktyviai klausomas, o šalinamas prievadas nebūtų naudojamas."
+					sleep 3
+					fun_conexao
+					return
+				fi
 			fi
 
 			if ! ssh_config_backup; then
