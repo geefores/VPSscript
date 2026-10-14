@@ -35,13 +35,13 @@ fi
 
 # Download and validate every module before changing any system files.
 modules=(
-  ShellBot.sh addhost delhost alterarsenha criarusuario expcleaner mudardata remover
+  addhost delhost alterarsenha criarusuario expcleaner mudardata remover
   sshplus-safe-restore
-  criarteste verifbot droplimiter alterarlimite ajuda sshmonitor badvpn
+  criarteste droplimiter alterarlimite ajuda sshmonitor badvpn
   userbackup instsqd blockt otimizar menu speedtest banner senharoot
   reiniciarservicos reiniciarsistema attscript conexao delscript detalhes
-  botssh infousers verifatt limiter uexpired cabecalho bot open.py slow_dns
-  proxy.py wsproxy.py trojan-go botteste onlineapp
+  infousers verifatt limiter uexpired cabecalho open.py slow_dns
+  proxy.py wsproxy.py trojan-go onlineapp
 )
 
 staging_dir="$(mktemp -d /tmp/sshplus-modules.XXXXXX)"
@@ -71,15 +71,9 @@ install -d -m 0750 \
   /etc/SSHPlus/v2ray \
   /etc/SSHPlus/senha \
   /etc/SSHPlus/userteste \
-  /etc/SSHPlus/.tmp \
-  /etc/bot/info-users \
-  /etc/bot/arquivos \
-  /etc/bot/revenda \
-  /etc/bot/suspensos
+  /etc/SSHPlus/.tmp
 install -d -m 0750 "$BACKUP_ROOT"
 : >> /etc/SSHPlus/Exp
-: >> /etc/bot/lista_ativos
-: >> /etc/bot/lista_suspensos
 
 # Keep a recoverable copy of files this installer is about to replace.
 backup_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -97,7 +91,7 @@ backup_if_exists() {
 install_staged_module() {
   local name="$1" destination mode="${2:-0755}"
   case "$name" in
-    ShellBot.sh|cabecalho|bot|open.py|proxy.py|wsproxy.py)
+    cabecalho|open.py|proxy.py|wsproxy.py)
       destination="/etc/SSHPlus/${name}"
       ;;
     *)
