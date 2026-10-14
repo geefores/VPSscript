@@ -1,13 +1,42 @@
-#!/bin/bash
-fun_exp () {
-(
-for _user in $(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody); do
-   if [[ $(chage -l $_user |grep "Account expires" |awk -F ': ' '{print $2}') != never ]]; then
-       [[ $(date +%s) -gt $(date '+%s' -d"$(chage -l $_user |grep "Account expires" |awk -F ': ' '{print $2}')") ]] && userexp=$(expr $userexp + 1)
-   fi
-   [[ userexp == [0-9] ]] && userexp=0$userexp
-done
-echo "$userexp" > /etc/SSHPlus/Exp
-) &
-}
-fun_exp > /dev/null 2>&1
+#!/usr/bin/env bash
+# Count expired non-system accounts for SSHPLUS.
+# Keeps the original output contract: /etc/SSHPlus/Exp contains the count.
+set -u
+
+exp_file="/etc/SSHPlus/Exp"
+exp_dir="/etc/SSHPlus"
+
+# This module is installed and scheduled by SSHPLUS. Do not create unrelated
+# system directories if it is run outside an SSHPLUS installation.
+[[ -d "$exp_dir" ]] || exit 0
+[[ "$EUID" -eq 0 ]] || exit 1
+command -v chage >/dev/null 2>&1 || exit 0
+command -v date >/dev/null 2>&1 || exit 0
+
+now_epoch="$(date +%s)" || exit 1
+expired_count=0
+
+while IFS=: read -r username _ uid _; do
+    [[ "$uid" =~ ^[0-9]+$ ]] || continue
+    (( uid >= 1000 )) || continue
+    [[ "$username" != "nobody" ]] || continue
+
+    account_expiry="$(chage -l "$username" 2>/dev/null |
+        awk -F ': ' '/^Account expires:/ { print $2; exit }')"
+
+    [[ -n "$account_expiry" && "$account_expiry" != "never" ]] || continue
+    expiry_epoch="$(date -d "$account_expiry" +%s 2>/dev/null)" || continue
+
+    if (( now_epoch > expiry_epoch )); then
+        ((expired_count += 1))
+    fi
+done < /etc/passwd
+
+tmp_file="$(mktemp "${exp_dir}/.Exp.XXXXXX")" || exit 1
+if printf '%s\n' "$expired_count" > "$tmp_file"; then
+    chmod 0640 "$tmp_file"
+    mv -f -- "$tmp_file" "$exp_file"
+else
+    rm -f -- "$tmp_file"
+    exit 1
+fi
