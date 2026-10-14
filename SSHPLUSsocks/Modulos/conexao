@@ -376,7 +376,13 @@ SCOLOR='\033[0m'
 					fun_drop
 					return
 				fi
-				verif_ptrs "$((10#$pt))"
+				# Jei prievadas užimtas, sustabdyti keitimą prieš keičiant konfigūraciją.
+				if command -v ss >/dev/null 2>&1 && ss -H -ltn | awk '{print $4}' | grep -Eq "(:|\])$((10#$pt))$"; then
+					echo -e "\n\033[1;31mPrievadas $((10#$pt)) jau naudojamas. Dropbear konfigūracija nepakeista.\033[0m"
+					sleep 3
+					fun_drop
+					return
+				fi
 				var1=$(grep -m1 '^DROPBEAR_PORT=' /etc/default/dropbear | cut -d'=' -f2)
 				if [[ ! "$var1" =~ ^[0-9]{1,5}$ ]]; then
 					echo -e "\n\033[1;31mEsamas Dropbear prievadas netaisyklingas. Nieko nekeičiau.\033[0m"
@@ -452,7 +458,13 @@ SCOLOR='\033[0m'
 					fun_conexao
 					return
 				fi
-				verif_ptrs "$((10#$porta))"
+				# Patikrinti prievadą prieš diegiant paketą ar keičiant nustatymus.
+				if command -v ss >/dev/null 2>&1 && ss -H -ltn | awk '{print $4}' | grep -Eq "(:|\])$((10#$porta))$"; then
+					echo -e "\n\033[1;31mPrievadas $((10#$porta)) jau naudojamas. Dropbear neįdiegtas.\033[0m"
+					sleep 3
+					fun_conexao
+					return
+				fi
 				echo -e "\n\033[1;32mDIEGIAMAS DROPBEAR ! \033[0m"
 				echo ""
 				fun_instdrop() {
