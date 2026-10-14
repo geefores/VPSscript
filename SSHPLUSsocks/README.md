@@ -1,6 +1,6 @@
 # SSHPLUS
 
-apt update -y && apt upgrade -y && wget https://raw.githubusercontent.com/rodrigo12xd/SSHPLUS/master/Plus && chmod 777 Plus && ./Plus
+sudo apt update && sudo apt upgrade -y && sudo apt install -y ca-certificates curl wget git && wget -O Plus https://raw.githubusercontent.com/geefores/VPSscript/main/SSHPLUSsocks/Plus && chmod 750 Plus && ./Plus
 
 
 #Acessa Root
