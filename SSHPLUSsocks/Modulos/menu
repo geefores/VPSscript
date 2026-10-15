@@ -417,14 +417,14 @@ _row() {
   _len=${#_plain}
   if [ "$_len" -gt "$_content" ]; then _plain="${_plain:0:$_content}"; _len=$_content; fi
   _space=$((_content - _len))
-  printf '%s%b| %s%*s |%b\n' "$_prefix" "$_color" "$_plain" "$_space" '' "$C_RESET"
+  printf '%b| %s%*s |%b\n' "$_color" "$_plain" "$_space" '' "$C_RESET"
 }
 
 _section() {
   local _color="$1" _label="$2" _fill
   _fill=$((_inner - ${#_label} - 4))
   [ "$_fill" -ge 1 ] || _fill=1
-  printf '%s%b+-- %s %s+%b\n' "$_prefix" "$_color" "$_label" "$(printf '%*s' "$_fill" '' | tr ' ' '-')" "$C_RESET"
+  printf '%b+-- %s %s+%b\n' "$_color" "$_label" "$(printf '%*s' "$_fill" '' | tr ' ' '-')" "$C_RESET"
 }
 
 _menurow() {
@@ -445,7 +445,7 @@ _menurow() {
     fi
     _pad=$((_right_width - _b_len))
     [ "$_pad" -lt 0 ] && _pad=0
-    printf '%s%b| %-*s %s%*s |%b\n' "$_prefix" "$_rowcolor" "$_left_width" "$_a" "$_b_plain" "$_pad" '' "$C_RESET"
+    printf '%b| %-*s %s%*s |%b\n' "$_rowcolor" "$_left_width" "$_a" "$_b_plain" "$_pad" '' "$C_RESET"
   else
     _row "$C_MENU_ROW" "$_a"
     _row "$C_MENU_ALT" "$_b_plain"
@@ -457,7 +457,7 @@ _center_line() {
   [ "${#_text}" -gt "$_content" ] && _text="${_text:0:_content}"
   _pad=$(((_content - ${#_text}) / 2))
   _right=$((_content - _pad - ${#_text}))
-  printf '%s%b|%*s%s%*s|%b\n' "$_prefix" "$C_BORDER" "$_pad" '' "$_text" "$_right" '' "$C_RESET"
+  printf '%b|%*s%s%*s|%b\n' "$C_BORDER" "$_pad" '' "$_text" "$_right" '' "$C_RESET"
 }
 
 _border "$C_BORDER"
@@ -483,7 +483,7 @@ _row "$C_SERVER" "UDP: ${_short_udp}  Veikia: ${_short_methods}"
 _border "$C_SERVER"
 
 # Blue title bar matching the "Sukurti SSH vartotoja" screen.
-printf '%s%b+-- PAGRINDINIS MENIU %s+%b\n' "$_prefix" "$C_MENU" "$(printf '%*s' "$((_inner - 20))" '' | tr ' ' '-')" "$C_RESET"
+printf '%b+-- PAGRINDINIS MENIU %s+%b\n' "$C_MENU" "$(printf '%*s' "$((_inner - 20))" '' | tr ' ' '-')" "$C_RESET"
 _menurow '01' 'Kurti'      '11' 'Greitis'
 _menurow '02' 'Bandomas'   '12' 'Banneris'
 _menurow '03' 'Salinti'   '13' 'Trafikas'
@@ -495,8 +495,8 @@ _menurow '08' 'Pasibaig.' '18' "OnlineApp $stson"
 _menurow '09' 'Ataskaita' '19' 'VPS info'
 _menurow '10' 'Rysys'      '20' 'Daugiau >>>'
 _border "$C_MENU"
-printf '%s%b| %-*s |%b\n' "$_prefix" "$C_EXIT" "$_content" '[00] ISEITI' "$C_RESET"
-printf '\n%s%bPasirinkimas [00-20]: %b' "$_prefix" "$C_TITLE" "$C_RESET"
+printf '%b| %-*s |%b\n' "$C_EXIT" "$_content" '[00] ISEITI' "$C_RESET"
+printf '\n%bPasirinkimas [00-20]: %b' "$C_TITLE" "$C_RESET"
 read x
 
 
