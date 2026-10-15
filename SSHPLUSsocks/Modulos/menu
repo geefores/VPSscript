@@ -365,7 +365,7 @@ clear
 _cols=$(tput cols 2>/dev/null || echo 40)
 case "$_cols" in ''|*[!0-9]*) _cols=40 ;; esac
 [ "$_cols" -ge 32 ] || _cols=32
-[ "$_cols" -le 44 ] || _cols=44
+[ "$_cols" -le 56 ] || _cols=56
 _inner=$((_cols - 2))
 _content=$((_inner - 2))
 _termcols=$(tput cols 2>/dev/null || echo "$_cols")
@@ -396,11 +396,11 @@ _short_methods=$(printf '%s' "$_methods" | cut -c1-18)
 clear
 # ASCII-only layout and colored information blocks for mobile SSH terminals.
 C_RESET='\033[0m'
-C_BORDER='\033[1;36m'       # cyan borders
+C_BORDER='\033[1;36m'        # cyan borders
 C_TITLE='\033[1;37;1m'      # bold white prompts
-C_SYSTEM='\033[1;37m'       # normal dark terminal background
-C_USERS='\033[1;37m'        # normal dark terminal background
-C_SERVER='\033[1;37m'       # normal dark terminal background
+C_SYSTEM='\033[1;37;44m'       # blue system block
+C_USERS='\033[1;37;44m'        # blue users block
+C_SERVER='\033[1;37;44m'       # blue server block
 C_MENU='\033[1;37;44m'      # blue menu heading
 C_NUM='\033[1;37m'
 C_TEXT='\033[1;37m'
@@ -433,8 +433,8 @@ _menurow() {
   _b_plain=$(printf '%s' "$_b" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
   _rowcolor="$C_MENU_ROW"
   case "$1" in 02|04|06|08|10) _rowcolor="$C_MENU_ALT" ;; esac
-  if [ "$_cols" -ge 44 ]; then
-    _left_width=17
+  if [ "$_cols" -ge 48 ]; then
+    _left_width=22
     _right_width=$((_content - _left_width - 1))
     [ "$_right_width" -lt 10 ] && _right_width=10
     _a=$(printf '%-*.*s' "$_left_width" "$_left_width" "$_a")
