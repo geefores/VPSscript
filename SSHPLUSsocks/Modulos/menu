@@ -391,18 +391,18 @@ _short_methods=$(printf '%s' "$_methods" | cut -c1-18)
 clear
 # ASCII-only layout and colored information blocks for mobile SSH terminals.
 C_RESET='\033[0m'
-C_BORDER='\033[1;36m'
-C_TITLE='\033[1;37;1m'
-C_SYSTEM='\033[1;37;44m'    # blue system block
-C_USERS='\033[1;30;42m'     # green users block
-C_SERVER='\033[1;30;46m'    # cyan server block
-C_MENU='\033[1;37;45m'      # purple menu heading/border
-C_NUM='\033[1;36m'
+C_BORDER='\033[1;36m'       # cyan borders
+C_TITLE='\033[1;37;1m'      # bold white prompts
+C_SYSTEM='\033[1;37m'       # normal dark terminal background
+C_USERS='\033[1;37m'        # normal dark terminal background
+C_SERVER='\033[1;37m'       # normal dark terminal background
+C_MENU='\033[1;37;44m'      # blue menu heading
+C_NUM='\033[1;37m'
 C_TEXT='\033[1;37m'
-C_SERVICE='\033[1;32m'
-C_EXIT='\033[1;37;41m'      # red exit row
-C_MENU_ROW='\033[1;37;44m'  # blue menu rows
-C_MENU_ALT='\033[1;30;46m'  # cyan alternate rows
+C_SERVICE='\033[1;32m'      # green service status
+C_EXIT='\033[1;31m'         # red exit text, dark background
+C_MENU_ROW='\033[1;37m'     # white text on terminal background
+C_MENU_ALT='\033[1;36m'     # cyan alternate text on terminal background
 
 _border() { printf '%b+%s+%b\n' "$1" "$_line" "$C_RESET"; }
 
@@ -477,7 +477,8 @@ _row "$C_SERVER" "SSH: ${_ssh_state}  TCP: ${_short_tcp}"
 _row "$C_SERVER" "UDP: ${_short_udp}  Veikia: ${_short_methods}"
 _border "$C_SERVER"
 
-_section "$C_MENU" 'PAGRINDINIS MENIU'
+# Blue title bar matching the "Sukurti SSH vartotoja" screen.
+printf '%b+-- PAGRINDINIS MENIU %s+%b\n' "$C_MENU" "$(printf '%*s' "$((_inner - 20))" '' | tr ' ' '-')" "$C_RESET"
 _menurow '01' 'Kurti'      '11' 'Greitis'
 _menurow '02' 'Bandomas'   '12' 'Banneris'
 _menurow '03' 'Salinti'   '13' 'Trafikas'
