@@ -365,7 +365,7 @@ clear
 _cols=$(tput cols 2>/dev/null || echo 40)
 case "$_cols" in ''|*[!0-9]*) _cols=40 ;; esac
 [ "$_cols" -ge 32 ] || _cols=32
-[ "$_cols" -le 56 ] || _cols=56
+[ "$_cols" -le 44 ] || _cols=44
 _inner=$((_cols - 2))
 _content=$((_inner - 2))
 _termcols=$(tput cols 2>/dev/null || echo "$_cols")
@@ -433,8 +433,8 @@ _menurow() {
   _b_plain=$(printf '%s' "$_b" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
   _rowcolor="$C_MENU_ROW"
   case "$1" in 02|04|06|08|10) _rowcolor="$C_MENU_ALT" ;; esac
-  if [ "$_cols" -ge 48 ]; then
-    _left_width=22
+  if [ "$_cols" -ge 44 ]; then
+    _left_width=17
     _right_width=$((_content - _left_width - 1))
     [ "$_right_width" -lt 10 ] && _right_width=10
     _a=$(printf '%-*.*s' "$_left_width" "$_left_width" "$_a")
