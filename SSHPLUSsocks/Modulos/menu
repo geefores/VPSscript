@@ -362,38 +362,34 @@ clear
 # MOBILE MENU FIX 2026-10-15 TWO-LINE BLOCKS / NO PROCESS PID LIST / OS RELEASE FIX
 # MOBILE MENU FIX 2026-10-15 CPU SAMPLE / CENTERED HEADER / OS RELEASE FIX
 # Kompaktiškas meniu telefonui: informacijos blokai po dvi eilutes.
-_cols=$(tput cols 2>/dev/null || stty size 2>/dev/null | awk '{print $2}' || echo 40)
+_cols=$(tput cols 2>/dev/null || echo 40)
 case "$_cols" in ''|*[!0-9]*) _cols=40 ;; esac
 [ "$_cols" -ge 32 ] || _cols=32
-[ "$_cols" -le 72 ] || _cols=72
+[ "$_cols" -le 80 ] || _cols=80
 _inner=$((_cols - 2))
-_line=$(printf '%*s' "$_inner" '' | tr ' ' '-')
 _content=$((_inner - 2))
+_line=$(printf '%*s' "$_inner" '' | tr ' ' '-')
 
 _tcp_list=$(ss -H -lnt 2>/dev/null | awk '{n=split($4,a,":"); if(a[n] ~ /^[0-9]+$/) print a[n]}' | sort -nu | paste -sd, -)
 _udp_list=$(ss -H -lnu 2>/dev/null | awk '{n=split($5,a,":"); if(a[n] ~ /^[0-9]+$/) print a[n]}' | sort -nu | paste -sd, -)
-[ -n "$_tcp_list" ] || _tcp_list="nėra"
-[ -n "$_udp_list" ] || _udp_list="nėra"
+[ -n "$_tcp_list" ] || _tcp_list="nera"
+[ -n "$_udp_list" ] || _udp_list="nera"
 
-# Rodome tik veikiančių systemd paslaugų pavadinimus; PID ir procesų sąrašo nėra.
 _methods=$(for svc in ssh sshd dropbear openvpn openvpn-server@server-tcp-1194 openvpn-server@server-udp-2200 xray stunnel5 strongswan-starter slowdns noobzvpns udp-custom; do
   state=$(systemctl is-active "$svc" 2>/dev/null || true)
   [ "$state" = active ] && printf '%s ' "$svc"
 done | xargs)
-[ -n "$_methods" ] || _methods="nėra"
+[ -n "$_methods" ] || _methods="nera"
 
-# Trumpiname ilgus sąrašus, kad kiekvienas informacijos blokas liktų dviejų eilučių.
 _short_tcp=$(printf '%s' "$_tcp_list" | cut -c1-24)
 [ "${#_tcp_list}" -le 24 ] || _short_tcp="${_short_tcp}..."
 _short_udp=$(printf '%s' "$_udp_list" | cut -c1-12)
 [ "${#_udp_list}" -le 12 ] || _short_udp="${_short_udp}..."
-_short_methods=$(printf '%s' "$_methods" | cut -c1-22)
-[ "${#_methods}" -le 22 ] || _short_methods="${_short_methods}..."
+_short_methods=$(printf '%s' "$_methods" | cut -c1-18)
+[ "${#_methods}" -le 18 ] || _short_methods="${_short_methods}..."
 
 clear
-# MOBILE MENU FIX 2026-10-15 COLOR PANELS / MAIN MENU HIGHLIGHT / NO PID LIST
-# Atskiri spalviniai blokai: sistema mėlyna, vartotojai žali, serveris geltonas,
-# pagrindinis meniu ryškiai violetinis su paryškintais pasirinkimų numeriais.
+# ASCII-only layout for compatibility with mobile SSH terminals.
 C_RESET='\033[0m'
 C_BORDER='\033[1;36m'
 C_TITLE='\033[1;37;1m'
@@ -407,66 +403,79 @@ C_SERVICE='\033[1;32m'
 C_EXIT='\033[1;31m'
 
 _border() { printf '%b+%s+%b\n' "$1" "$_line" "$C_RESET"; }
+
+_row() {
+  local _color="$1" _text="$2" _plain _len _space
+  _plain=$(printf '%s' "$_text" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
+  _len=${#_plain}
+  [ "$_len" -gt "$_content" ] && _plain="${_plain:0:_content}" && _len=$_content
+  _space=$((_content - _len))
+  printf '%b| %s%*s |%b\n' "$_color" "$_text" "$_space" '' "$C_RESET"
+}
+
 _section() {
   local _color="$1" _label="$2" _fill
-  _fill=$((_inner - ${#_label} - 5))
+  _fill=$((_inner - ${#_label} - 4))
   [ "$_fill" -ge 1 ] || _fill=1
   printf '%b+-- %s %s+%b\n' "$_color" "$_label" "$(printf '%*s' "$_fill" '' | tr ' ' '-')" "$C_RESET"
 }
+
 _menurow() {
-  # Parametrai: numeris, tekstas, numeris, tekstas
-  printf '%b[%s]%b %b%-9s%b  %b[%s]%b %b%s%b\n' "$C_NUM" "$1" "$C_RESET" "$C_TITLE" "$2" "$C_RESET" "$C_NUM" "$3" "$C_RESET" "$C_TITLE" "$4" "$C_RESET"
+  local _a="[$1] $2" _b="[$3] $4"
+  if [ "$_cols" -ge 48 ]; then
+    printf '%b| %-19s %-19s |%b\n' "$C_TITLE" "$_a" "$_b" "$C_RESET"
+  else
+    printf '%b| %-*s |%b\n' "$C_TITLE" "$_content" "$_a" "$C_RESET"
+    printf '%b| %-*s |%b\n' "$C_TITLE" "$_content" "$_b" "$C_RESET"
+  fi
 }
 
 _center_line() {
-  local _text="$1" _pad
-  _pad=$((_inner - ${#_text}))
-  [ "$_pad" -ge 0 ] || _pad=0
-  _pad=$((_pad / 2))
-  printf '%b|%*s%s%*s|%b\\n' "$C_BORDER" "$_pad" '' "$_text" "$((_inner - _pad - ${#_text}))" '' "$C_RESET"
+  local _text="$1" _pad _right
+  [ "${#_text}" -gt "$_content" ] && _text="${_text:0:_content}"
+  _pad=$(((_content - ${#_text}) / 2))
+  _right=$((_content - _pad - ${#_text}))
+  printf '%b|%*s%s%*s|%b\n' "$C_BORDER" "$_pad" '' "$_text" "$_right" '' "$C_RESET"
 }
 
 _border "$C_BORDER"
-_center_line 'SSHPLUS MANAGER' 
+_center_line 'SSHPLUS MANAGER'
 _center_line 'DEINTERNET VPS GROUP'
 _border "$C_BORDER"
 
 _section "$C_SYSTEM" 'SISTEMA'
-printf ' %bOS:%b %s %b|%b Laikas: %s\n' "$C_SYSTEM" "$C_RESET" "$_system" "$C_SYSTEM" "$C_RESET" "${_hora%:*}"
-printf ' %bCPU:%b %s %b|%b Brand.: %s %b|%b RAM: %s %s\n' "$C_SYSTEM" "$C_RESET" "$_usop" "$C_SYSTEM" "$C_RESET" "$_core" "$C_SYSTEM" "$C_RESET" "$_ram" "$_usor"
+_row "$C_SYSTEM" "OS: ${_system}  Laikas: ${_hora%:*}"
+_row "$C_SYSTEM" "CPU: ${_usop}  Brand.: ${_core}  RAM: ${_ram}"
 _border "$C_SYSTEM"
 
 _section "$C_USERS" 'VARTOTOJAI'
-printf ' %bPrisijungę:%b %s %b|%b Pasibaigę: %s\n' "$C_USERS" "$C_RESET" "$_onlin" "$C_USERS" "$C_RESET" "$_userexp"
-printf ' %bIš viso vartotojų:%b %s\n' "$C_USERS" "$C_RESET" "$_tuser"
+_row "$C_USERS" "Prisijunge: ${_onli}  Pasibeige: ${_expuser}"
+_row "$C_USERS" "Is viso vartotoju: ${_tuser}"
 _border "$C_USERS"
 
 _section "$C_SERVER" 'SERVERIS'
 _ssh_state=$(systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null || echo unknown)
 _ssh_color="$C_EXIT"; [ "$_ssh_state" = active ] && _ssh_color="$C_SERVICE"
-printf ' %bSSH:%b %b%s%b %b|%b TCP: %s\n' "$C_SERVER" "$C_RESET" "$_ssh_color" "$_ssh_state" "$C_RESET" "$C_SERVER" "$C_RESET" "$_short_tcp"
-printf ' %bUDP:%b %s %b|%b %bVeikia:%b %s\n' "$C_SERVER" "$C_RESET" "$_short_udp" "$C_SERVER" "$C_RESET" "$C_SERVICE" "$C_RESET" "$_short_methods"
+_row "$C_SERVER" "SSH: ${_ssh_state}  TCP: ${_short_tcp}"
+_row "$C_SERVER" "UDP: ${_short_udp}  Veikia: ${_short_methods}"
 _border "$C_SERVER"
 
-# Pagrindinis meniu yra vizualiai ryškiausias blokas.
 _section "$C_MENU" 'PAGRINDINIS MENIU'
-printf '%b' "$C_TITLE"
-_menurow '01' 'Kurti'      '11' 'Speedtest'
+_menurow '01' 'Kurti'      '11' 'Greitis'
 _menurow '02' 'Bandomas'   '12' 'Banneris'
-_menurow '03' 'Šalinti'    '13' 'Trafikas'
-_menurow '04' 'Online'     '14' 'Optimiz.'
-_menurow '05' 'Galioj.'    '15' 'Backup'
-_menurow '06' 'Ribojimai'  '16' 'IP ribos'
-_menurow '07' 'Slaptaž.'   '17' "BAD VPN $stsu"
-_menurow '08' 'Pasibaig.'  '18' "Online App $stson"
-_menurow '09' 'Ataskaita'  '19' 'VPS info'
-_menurow '10' 'Ryšys'      '20' 'Daugiau >>>'
-printf '%b' "$C_RESET"
+_menurow '03' 'Salinti'   '13' 'Trafikas'
+_menurow '04' 'Online'    '14' 'Optimiz.'
+_menurow '05' 'Galioj.'   '15' 'Backup'
+_menurow '06' 'Ribojimai' '16' 'IP ribos'
+_menurow '07' 'Slaptaz.'  '17' "BAD VPN $stsu"
+_menurow '08' 'Pasibaig.' '18' "OnlineApp $stson"
+_menurow '09' 'Ataskaita' '19' 'VPS info'
+_menurow '10' 'Rysys'      '20' 'Daugiau >>>'
 _border "$C_MENU"
-printf '%b [00] IŠEITI%b\n\n' "$C_EXIT" "$C_RESET"
-printf '%b Pasirinkimas [00–20]: %b' "$C_TITLE" "$C_RESET"
-
+printf '%b| %-*s |%b\n' "$C_EXIT" "$_content" '[00] ISEITI' "$C_RESET"
+printf '\n%bPasirinkimas [00-20]: %b' "$C_TITLE" "$C_RESET"
 read x
+
 
 case "$x" in 
    1 | 01)
