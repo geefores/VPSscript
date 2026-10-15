@@ -201,16 +201,13 @@ if [[ ! -e /usr/lib/licence ]]; then
   echo -e "\033[1;31mKLAIDA: nerastas SSHPLUS licencijos zymeklis (/usr/lib/licence).\033[0m"
   return 1
 fi
-if [[ "$(grep -c "Ubuntu" /etc/issue.net)" = "1" ]]; then
-system=$(cut -d' ' -f1 /etc/issue.net)
-system+=$(echo ' ')
-system+=$(cut -d' ' -f2 /etc/issue.net |awk -F "." '{print $1}')
-elif [[ "$(grep -c "Debian" /etc/issue.net)" = "1" ]]; then
-system=$(cut -d' ' -f1 /etc/issue.net)
-system+=$(echo ' ')
-system+=$(cut -d' ' -f3 /etc/issue.net)
+# OS versiją imame iš /etc/os-release, o ne /etc/issue.net (jame gali būti HTML).
+if [ -r /etc/os-release ]; then
+  . /etc/os-release
+  system="${PRETTY_NAME:-${NAME:-Linux}}"
+  system=$(printf '%s' "$system" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
 else
-system=$(cut -d' ' -f1 /etc/issue.net)
+  system="Linux"
 fi
 _ons=$(ps -x | grep sshd | grep -v root | grep priv | wc -l)
 [[ "$(cat /etc/SSHPlus/Exp)" != "" ]] && _expuser=$(cat /etc/SSHPlus/Exp) || _expuser="0"
@@ -329,16 +326,13 @@ do
 stsl=$(ps x | grep "limiter"|grep -v grep > /dev/null && echo -e "\033[1;32m◉ " || echo -e "\033[1;31m○ ")
 stson=$(ps x | grep "onlineapp"|grep -v grep > /dev/null && echo -e "\033[1;32m◉ " || echo -e "\033[1;31m○ ")
 stsu=$(ps x | grep "udpvpn"|grep -v grep > /dev/null && echo -e "\033[1;32m◉ " || echo -e "\033[1;31m○ ")
-if [[ "$(grep -c "Ubuntu" /etc/issue.net)" = "1" ]]; then
-system=$(cut -d' ' -f1 /etc/issue.net)
-system+=$(echo ' ')
-system+=$(cut -d' ' -f2 /etc/issue.net |awk -F "." '{print $1}')
-elif [[ "$(grep -c "Debian" /etc/issue.net)" = "1" ]]; then
-system=$(cut -d' ' -f1 /etc/issue.net)
-system+=$(echo ' ')
-system+=$(cut -d' ' -f3 /etc/issue.net)
+# OS versiją imame iš /etc/os-release, o ne /etc/issue.net (jame gali būti HTML).
+if [ -r /etc/os-release ]; then
+  . /etc/os-release
+  system="${PRETTY_NAME:-${NAME:-Linux}}"
+  system=$(printf '%s' "$system" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
 else
-system=$(cut -d' ' -f1 /etc/issue.net)
+  system="Linux"
 fi
 _ons=$(ps -x | grep sshd | grep -v root | grep priv | wc -l)
 [[ "$(cat /etc/SSHPlus/Exp)" != "" ]] && _expuser=$(cat /etc/SSHPlus/Exp) || _expuser="0"
@@ -365,8 +359,8 @@ _onlin=$(printf '%-5s' "$_onli")
 _userexp=$(printf '%-5s' "$_expuser")
 _tuser=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)
 clear
-# MOBILE MENU FIX 2026-10-15 TWO-LINE BLOCKS / NO PROCESS PID LIST
-# MOBILE MENU FIX 2026-10-15 CPU SAMPLE / CENTERED HEADER
+# MOBILE MENU FIX 2026-10-15 TWO-LINE BLOCKS / NO PROCESS PID LIST / OS RELEASE FIX
+# MOBILE MENU FIX 2026-10-15 CPU SAMPLE / CENTERED HEADER / OS RELEASE FIX
 # Kompaktiškas meniu telefonui: informacijos blokai po dvi eilutes.
 _cols=$(tput cols 2>/dev/null || stty size 2>/dev/null | awk '{print $2}' || echo 40)
 case "$_cols" in ''|*[!0-9]*) _cols=40 ;; esac
