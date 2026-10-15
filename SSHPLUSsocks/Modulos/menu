@@ -422,8 +422,15 @@ _section() {
 
 _menurow() {
   local _a="[$1] $2" _b="[$3] $4"
+  local _b_plain _b_len _b_pad
+  # Status variables may contain ANSI color escapes. Remove them only for
+  # measuring visible width so the second column remains aligned in SSH terminals.
+  _b_plain=$(printf '%s' "$_b" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
+  _b_len=${#_b_plain}
   if [ "$_cols" -ge 48 ]; then
-    printf '%b| %-19s %-19s |%b\n' "$C_TITLE" "$_a" "$_b" "$C_RESET"
+    _b_pad=$((19 - _b_len))
+    [ "$_b_pad" -lt 1 ] && _b_pad=1
+    printf '%b| %-19s %s%*s |%b\n' "$C_TITLE" "$_a" "$_b" "$_b_pad" '' "$C_RESET"
   else
     printf '%b| %-*s |%b\n' "$C_TITLE" "$_content" "$_a" "$C_RESET"
     printf '%b| %-*s |%b\n' "$C_TITLE" "$_content" "$_b" "$C_RESET"
