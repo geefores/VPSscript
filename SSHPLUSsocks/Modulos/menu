@@ -389,22 +389,20 @@ _short_methods=$(printf '%s' "$_methods" | cut -c1-18)
 [ "${#_methods}" -le 18 ] || _short_methods="${_short_methods}..."
 
 clear
-# ASCII-only layout for compatibility with mobile SSH terminals.
+# ASCII-only layout and colored information blocks for mobile SSH terminals.
 C_RESET='\033[0m'
 C_BORDER='\033[1;36m'
 C_TITLE='\033[1;37;1m'
-# Colorful block palette: dark background bands with readable foregrounds.
-C_SYSTEM='\033[1;37;44m'   # blue block
-C_USERS='\033[1;37;42m'    # green block
-C_SERVER='\033[1;30;43m'   # yellow block
-C_MENU='\033[1;37;45m'     # purple block
+C_SYSTEM='\033[1;37;44m'    # blue system block
+C_USERS='\033[1;30;42m'     # green users block
+C_SERVER='\033[1;30;46m'    # cyan server block
+C_MENU='\033[1;37;45m'      # purple menu heading/border
 C_NUM='\033[1;36m'
 C_TEXT='\033[1;37m'
 C_SERVICE='\033[1;32m'
-C_EXIT='\033[1;37;41m'     # red exit block
-C_MENU_ROW='\033[1;37;46m' # teal menu row block
-C_MENU_ALT='\033[1;37;44m' # blue alternate row
-C_RESET_BG='\033[0m'
+C_EXIT='\033[1;37;41m'      # red exit row
+C_MENU_ROW='\033[1;37;44m'  # blue menu rows
+C_MENU_ALT='\033[1;30;46m'  # cyan alternate rows
 
 _border() { printf '%b+%s+%b\n' "$1" "$_line" "$C_RESET"; }
 
@@ -412,7 +410,7 @@ _row() {
   local _color="$1" _text="$2" _plain _len _space
   _plain=$(printf '%s' "$_text" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
   _len=${#_plain}
-  [ "$_len" -gt "$_content" ] && _plain="${_plain:0:_content}" && _len=$_content
+  if [ "$_len" -gt "$_content" ]; then _plain="${_plain:0:$_content}"; _len=$_content; fi
   _space=$((_content - _len))
   printf '%b| %s%*s |%b\n' "$_color" "$_plain" "$_space" '' "$C_RESET"
 }
@@ -426,8 +424,7 @@ _section() {
 
 _menurow() {
   local _a="[$1] $2" _b="[$3] $4"
-  local _b_plain _a_plain _b_len _left_width _right_width _pad _rowcolor _plain
-  _a_plain="$_a"
+  local _b_plain _a_plain _b_len _left_width _right_width _pad _rowcolor
   _b_plain=$(printf '%s' "$_b" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
   _rowcolor="$C_MENU_ROW"
   case "$1" in 02|04|06|08|10) _rowcolor="$C_MENU_ALT" ;; esac
@@ -435,19 +432,21 @@ _menurow() {
     _left_width=22
     _right_width=$((_content - _left_width - 1))
     [ "$_right_width" -lt 10 ] && _right_width=10
-    _a_plain=$(printf '%-*.*s' "$_left_width" "$_left_width" "$_a_plain")
+    _a=$(printf '%-*.*s' "$_left_width" "$_left_width" "$_a")
     _b_len=${#_b_plain}
-    if [ "$_b_len" -gt "$_right_width" ]; then
-      _b_plain=$(printf '%-*.*s' "$_right_width" "$_right_width" "$_b_plain")
+    if [ "$_b_len" -gt "$((_right_width - 1))" ]; then
+      _b_plain=$(printf '%-*.*s' "$((_right_width - 1))" "$((_right_width - 1))" "$_b_plain")
       _b_len=${#_b_plain}
     fi
     _pad=$((_right_width - _b_len))
-    printf '%b| %s %s%*s |%b\n' "$_rowcolor" "$_a_plain" "$_b_plain" "$_pad" '' "$C_RESET"
+    [ "$_pad" -lt 0 ] && _pad=0
+    printf '%b| %-*s %s%*s |%b\n' "$_rowcolor" "$_left_width" "$_a" "$_b_plain" "$_pad" '' "$C_RESET"
   else
-    printf '%b| %-*s |%b\n' "$_rowcolor" "$_content" "$_a_plain" "$C_RESET"
-    printf '%b| %-*s |%b\n' "$_rowcolor" "$_content" "$_b_plain" "$C_RESET"
+    _row "$C_MENU_ROW" "$_a"
+    _row "$C_MENU_ALT" "$_b_plain"
   fi
 }
+
 _center_line() {
   local _text="$1" _pad _right
   [ "${#_text}" -gt "$_content" ] && _text="${_text:0:_content}"
