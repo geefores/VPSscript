@@ -398,9 +398,9 @@ clear
 C_RESET='\033[0m'
 C_BORDER='\033[1;36m'       # cyan borders
 C_TITLE='\033[1;37;1m'      # bold white prompts
-C_SYSTEM='\033[1;37;44m'       # blue section heading
-C_USERS='\033[1;37;44m'        # blue section heading
-C_SERVER='\033[1;37;44m'       # blue section heading
+C_SYSTEM='\033[1;37;44m'       # blue heading only
+C_USERS='\033[1;37;44m'        # blue heading only
+C_SERVER='\033[1;37;44m'       # blue heading only
 C_MENU='\033[1;37;44m'      # blue menu heading
 C_NUM='\033[1;37m'
 C_TEXT='\033[1;37m'
@@ -409,7 +409,7 @@ C_EXIT='\033[1;31m'         # red exit text, dark background
 C_MENU_ROW='\033[1;37m'     # white text on terminal background
 C_MENU_ALT='\033[1;36m'     # cyan alternate text on terminal background
 
-_border() { printf '%s%b+%s+%b\n' "$_prefix" "$1" "$_line" "$C_RESET"; }
+_border() { printf '%s%b+%s+%b\n' "$_prefix" "$C_BORDER" "$_line" "$C_RESET"; }
 
 _row() {
   local _color="$1" _text="$2" _plain _len _space
@@ -417,14 +417,14 @@ _row() {
   _len=${#_plain}
   if [ "$_len" -gt "$_content" ]; then _plain="${_plain:0:$_content}"; _len=$_content; fi
   _space=$((_content - _len))
-  printf '%b| %s%*s |%b\n' "$_color" "$_plain" "$_space" '' "$C_RESET"
+  printf '%s%b| %s%*s |%b\n' "$_prefix" "$_color" "$_plain" "$_space" '' "$C_RESET"
 }
 
 _section() {
   local _color="$1" _label="$2" _fill
   _fill=$((_inner - ${#_label} - 4))
   [ "$_fill" -ge 1 ] || _fill=1
-  printf '%b+-- %s %s+%b\n' "$_color" "$_label" "$(printf '%*s' "$_fill" '' | tr ' ' '-')" "$C_RESET"
+  printf '%s%b+-- %s %s+%b\n' "$_prefix" "$_color" "$_label" "$(printf '%*s' "$_fill" '' | tr ' ' '-')" "$C_RESET"
 }
 
 _menurow() {
@@ -445,7 +445,7 @@ _menurow() {
     fi
     _pad=$((_right_width - _b_len))
     [ "$_pad" -lt 0 ] && _pad=0
-    printf '%b| %-*s %s%*s |%b\n' "$_rowcolor" "$_left_width" "$_a" "$_b_plain" "$_pad" '' "$C_RESET"
+    printf '%s%b| %-*s %s%*s |%b\n' "$_prefix" "$_rowcolor" "$_left_width" "$_a" "$_b_plain" "$_pad" '' "$C_RESET"
   else
     _row "$C_MENU_ROW" "$_a"
     _row "$C_MENU_ALT" "$_b_plain"
@@ -457,7 +457,7 @@ _center_line() {
   [ "${#_text}" -gt "$_content" ] && _text="${_text:0:_content}"
   _pad=$(((_content - ${#_text}) / 2))
   _right=$((_content - _pad - ${#_text}))
-  printf '%b|%*s%s%*s|%b\n' "$C_BORDER" "$_pad" '' "$_text" "$_right" '' "$C_RESET"
+  printf '%s%b|%*s%s%*s|%b\n' "$_prefix" "$C_BORDER" "$_pad" '' "$_text" "$_right" '' "$C_RESET"
 }
 
 _border "$C_BORDER"
@@ -468,22 +468,22 @@ _border "$C_BORDER"
 _section "$C_SYSTEM" 'SISTEMA'
 _row "$C_TEXT" "OS: ${_system}  Laikas: ${_hora%:*}"
 _row "$C_TEXT" "CPU: ${_usop}  Brand.: ${_core}  RAM: ${_ram}"
-_border "$C_SYSTEM"
+_border "$C_BORDER"
 
 _section "$C_USERS" 'VARTOTOJAI'
 _row "$C_TEXT" "Prisijunge: ${_onli}  Pasibeige: ${_expuser}"
 _row "$C_TEXT" "Is viso vartotoju: ${_tuser}"
-_border "$C_USERS"
+_border "$C_BORDER"
 
 _section "$C_SERVER" 'SERVERIS'
 _ssh_state=$(systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null || echo unknown)
 _ssh_color="$C_EXIT"; [ "$_ssh_state" = active ] && _ssh_color="$C_SERVICE"
 _row "$C_TEXT" "SSH: ${_ssh_state}  TCP: ${_short_tcp}"
 _row "$C_TEXT" "UDP: ${_short_udp}  Veikia: ${_short_methods}"
-_border "$C_SERVER"
+_border "$C_BORDER"
 
 # Blue title bar matching the "Sukurti SSH vartotoja" screen.
-printf '%b+-- PAGRINDINIS MENIU %s+%b\n' "$C_MENU" "$(printf '%*s' "$((_inner - 20))" '' | tr ' ' '-')" "$C_RESET"
+printf '%s%b+-- PAGRINDINIS MENIU %s+%b\n' "$_prefix" "$C_MENU" "$(printf '%*s' "$((_inner - 20))" '' | tr ' ' '-')" "$C_RESET"
 _menurow '01' 'Kurti'      '11' 'Greitis'
 _menurow '02' 'Bandomas'   '12' 'Banneris'
 _menurow '03' 'Salinti'   '13' 'Trafikas'
@@ -494,9 +494,9 @@ _menurow '07' 'Slaptaz.'  '17' "BAD VPN $stsu"
 _menurow '08' 'Pasibaig.' '18' "OnlineApp $stson"
 _menurow '09' 'Ataskaita' '19' 'VPS info'
 _menurow '10' 'Rysys'      '20' 'Daugiau >>>'
-_border "$C_MENU"
-printf '%b| %-*s |%b\n' "$C_EXIT" "$_content" '[00] ISEITI' "$C_RESET"
-printf '\n%bPasirinkimas [00-20]: %b' "$C_TITLE" "$C_RESET"
+_border "$C_BORDER"
+printf '%s%b| %-*s |%b\n' "$_prefix" "$C_EXIT" "$_content" '[00] ISEITI' "$C_RESET"
+printf '\n%s%bPasirinkimas [00-20]: %b' "$_prefix" "$C_TITLE" "$C_RESET"
 read x
 
 
