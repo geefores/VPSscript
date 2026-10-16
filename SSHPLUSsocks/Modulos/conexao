@@ -89,7 +89,7 @@ SCOLOR='\033[0m'
 			return
 		fi
 
-		read -r -p "Įveskite Squid TCP prievadą(-us), pvz. 8080 arba 8080 3128: " ports
+		read -r -p "Įveskite Squid TCP prievadą(-us), pvz. 80 8080: " ports
 		if [[ -z "$ports" ]]; then
 			echo -e "\n\033[1;31mPrievadai nenurodyti.\033[0m"
 			sleep 2
@@ -158,10 +158,10 @@ PAYLOAD_EOF
 		{
 			cat <<EOF
 acl localhost_src src 127.0.0.1/32 ::1
-acl Safe_ports port 80 443 1025-65535
+acl Safe_ports port 80 443 8080 1025-65535
 acl SSL_ports port 443
 acl CONNECT method CONNECT
-acl payload_domains dstdomain -i "$pay"
+acl payload_domains dstdomain "$pay"
 http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
 http_access allow localhost_src
