@@ -333,7 +333,7 @@ EOF
 	fun_drop() {
 		if netstat -nltp | grep 'dropbear' 1>/dev/null 2>/dev/null; then
 			clear
-			[[ $(netstat -nltp | grep -c 'dropbear') != '0' ]] && dpbr=$(netstat -nplt | grep 'dropbear' | awk -F ":" {'print $4'} | xargs) || sqdp="\033[1;31mNEPASIEKIAMAS"
+			[[ $(netstat -nltp | grep -c 'dropbear') != '0' ]] && dpbr=$(ss -H -ltnp 2>/dev/null | awk '/dropbear/ {addr=$4; sub(/^.*:/, "", addr); gsub(/[^0-9]/, "", addr); if (addr ~ /^[0-9]+$/) print addr}' | sort -nu | xargs) || sqdp="\033[1;31mNEPASIEKIAMAS"
 			if ps x | grep "limiter" | grep -v grep 1>/dev/null 2>/dev/null; then
 				stats='\033[1;32m◉ '
 			else
@@ -382,8 +382,8 @@ EOF
 					fun_drop
 					return
 				fi
-				if [[ ! -f /etc/default/dropbear ]] || ! grep -q '^DROPBEAR_PORT=' /etc/default/dropbear; then
-					echo -e "\n\033[1;31mNerasta DROPBEAR_PORT konfigūracija. Nieko nekeičiau.\033[0m"
+				if [[ ! -f /etc/default/dropbear ]]; then
+					echo -e "\n\033[1;31mNerastas /etc/default/dropbear. Nieko nekeičiau.\033[0m"
 					sleep 3
 					fun_drop
 					return
@@ -395,17 +395,16 @@ EOF
 					fun_drop
 					return
 				fi
-				var1=$(grep -m1 '^DROPBEAR_PORT=' /etc/default/dropbear | cut -d'=' -f2)
-				if [[ ! "$var1" =~ ^[0-9]{1,5}$ ]]; then
-					echo -e "\n\033[1;31mEsamas Dropbear prievadas netaisyklingas. Nieko nekeičiau.\033[0m"
-					sleep 3
-					fun_drop
-					return
-				fi
+				# Ubuntu 24.04 pakete DROPBEAR_PORT gali būti tik komentaruose.
+				# Naujas portas įrašomas kaip aktyvi eilutė, nekeičiant kitų nustatymų.
 				backup_dropbear=$(mktemp /etc/default/dropbear.sshplus.XXXXXX) || { echo "Nepavyko sukurti atsarginės kopijos."; fun_drop; return; }
 				cp -p /etc/default/dropbear "$backup_dropbear" || { rm -f "$backup_dropbear"; fun_drop; return; }
 				echo -e "\033[1;32mKEICIAMAS DROPBEAR PORTAS!"
-				sed -i "0,/^DROPBEAR_PORT=.*/s//DROPBEAR_PORT=$((10#$pt))/" /etc/default/dropbear
+				if grep -q '^DROPBEAR_PORT=' /etc/default/dropbear; then
+					sed -i "0,/^DROPBEAR_PORT=.*/s//DROPBEAR_PORT=$((10#$pt))/" /etc/default/dropbear
+				else
+					printf '\nDROPBEAR_PORT=%s\n' "$((10#$pt))" >> /etc/default/dropbear
+				fi
 				if ! grep -q "^DROPBEAR_PORT=$((10#$pt))$" /etc/default/dropbear; then
 					cp -p "$backup_dropbear" /etc/default/dropbear
 					rm -f "$backup_dropbear"
@@ -484,27 +483,46 @@ EOF
 					apt-get install dropbear -y
 				}
 				fun_bar 'fun_instdrop'
+				# Sukonfigūruojame Ubuntu/Debian paketą: aktyvi eilutė būtina,
+				# nes numatytasis DROPBEAR_PORT=22 konfliktuoja su OpenSSH.
+				backup_dropbear=$(mktemp /etc/default/dropbear.sshplus.XXXXXX) || { echo "Nepavyko sukurti atsarginės kopijos."; fun_conexao; return; }
+				if [[ -f /etc/default/dropbear ]]; then
+					cp -p /etc/default/dropbear "$backup_dropbear" || { rm -f "$backup_dropbear"; fun_conexao; return; }
+				else
+					: > /etc/default/dropbear
+				fi
 				fun_ports() {
-					sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear >/dev/null 2>&1
-					sed -i "s/DROPBEAR_PORT=22/DROPBEAR_PORT=$porta/g" /etc/default/dropbear >/dev/null 2>&1
-					sed -i 's/DROPBEAR_EXTRA_ARGS=/DROPBEAR_EXTRA_ARGS="-p 110"/g' /etc/default/dropbear >/dev/null 2>&1
+					if grep -q '^DROPBEAR_PORT=' /etc/default/dropbear; then
+						sed -i "0,/^DROPBEAR_PORT=.*/s//DROPBEAR_PORT=$((10#$porta))/" /etc/default/dropbear
+					else
+						printf '\nDROPBEAR_PORT=%s\n' "$((10#$porta))" >> /etc/default/dropbear
+					fi
+					if grep -q '^DROPBEAR_EXTRA_ARGS=' /etc/default/dropbear; then
+						sed -i '0,/^DROPBEAR_EXTRA_ARGS=.*/s//DROPBEAR_EXTRA_ARGS=""/' /etc/default/dropbear
+					else
+						printf 'DROPBEAR_EXTRA_ARGS=""\n' >> /etc/default/dropbear
+					fi
 				}
-				echo ""
-				echo -e "\033[1;32mKONFIGURUOJAMAS DROPBEAR PORTAS!\033[0m"
-				echo ""
-				fun_bar 'fun_ports'
-				# Dropbear veikimui nereikia keisti OpenSSH sshd_config.
-				# Paliekame esamą SSH konfigūraciją nepakeistą, kad nepažeistume
-				# aktyvių OpenSSH nustatymų ar nuotolinės prieigos.
-				echo ""
-				echo -e "\033[1;32mBAIGIAMAS DROPBEAR DIEGIMAS !\033[0m"
-				echo ""
-				fun_ondrop() {
-					service dropbear start
-					/etc/init.d/dropbear restart
-				}
-				fun_bar 'fun_ondrop' 'sleep 1'
-				echo -e "\n\033[1;32mDIEGIMAS BAIGTAS SEKMINGAI \033[1;33mPORTAS: \033[1;37m$porta\033[0m"
+				if ! fun_ports || ! grep -q "^DROPBEAR_PORT=$((10#$porta))$" /etc/default/dropbear; then
+				cp -p "$backup_dropbear" /etc/default/dropbear
+				rm -f "$backup_dropbear"
+				echo -e "\n\033[1;31mNepavyko sukonfigūruoti Dropbear; nustatymai atkurti.\033[0m"
+				fun_conexao
+				return
+			fi
+			# Dropbear veikimui nereikia keisti OpenSSH sshd_config.
+			echo -e "\n\033[1;32mPaleidžiamas Dropbear ir tikrinamas portas...\033[0m"
+			if systemctl restart dropbear && systemctl is-active --quiet dropbear && ss -H -ltn "sport = :$((10#$porta))" | grep -q .; then
+				rm -f "$backup_dropbear"
+				echo -e "\n\033[1;32mDROPBEAR VEIKIA. PORTAS: $((10#$porta))\033[0m"
+			else
+				cp -p "$backup_dropbear" /etc/default/dropbear
+				systemctl restart dropbear >/dev/null 2>&1 || true
+				rm -f "$backup_dropbear"
+				echo -e "\n\033[1;31mDropbear nepasileido arba portas neklausomas. Konfigūracija atkurta; patikrinkite journalctl -u dropbear.\033[0m"
+				fun_conexao
+				return
+			fi
 				[[ $(grep -c "/bin/false" /etc/shells) = '0' ]] && echo "/bin/false" >>/etc/shells
 				sleep 2
 				clear
@@ -2355,7 +2373,7 @@ exit 0' >$RCLOCAL
 				sts3="\033[1;31m○ "
 			}
 			[[ "$(netstat -tlpn | grep 'dropbear' | wc -l)" != '0' ]] && {
-				echo -e "\033[1;32mSERVISAS: \033[1;33mDROPBEAR \033[1;32mPORTAS: \033[1;37m$(netstat -nplt | grep 'dropbear' | awk -F ":" {'print $4'} | xargs)"
+				echo -e "\033[1;32mSERVISAS: \033[1;33mDROPBEAR \033[1;32mPORTAS: \033[1;37m$(ss -H -ltnp 2>/dev/null | awk '/dropbear/ {addr=$4; sub(/^.*:/, "", addr); gsub(/[^0-9]/, "", addr); if (addr ~ /^[0-9]+$/) print addr}' | sort -nu | xargs)"
 				sts2="\033[1;32m◉ "
 			} || {
 				sts2="\033[1;31m○ "
