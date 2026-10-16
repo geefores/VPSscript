@@ -176,9 +176,9 @@ forwarded_for off
 pipeline_prefetch off
 EOF
 		} > "$tmp"
-		if ! squid -k parse -f "$tmp"; then
+		if ! squid -k parse -f "$tmp" 2>&1; then
 			rm -f "$tmp"
-			echo -e "\n\033[1;31mSquid konfigūracijos patikra nepavyko. Esama konfigūracija nepakeista.\033[0m"
+			echo -e "\n\033[1;31mSquid konfigūracijos patikra nepavyko. Esama konfigūracija nepakeista. Atkreipkite dėmesį į parserio klaidą aukščiau.\033[0m"
 			read -r -p "Spauskite ENTER..."
 			fun_conexao
 			return
