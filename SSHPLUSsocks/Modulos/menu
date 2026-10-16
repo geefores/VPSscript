@@ -429,30 +429,35 @@ _section() {
 }
 
 _menurow() {
-  local _a="[$1] $2" _b="[$3] $4"
-  local _b_plain _a_plain _b_len _left_width _right_width _pad _rowcolor
-  _b_plain=$(printf '%s' "$_b" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
-  _rowcolor="$C_MENU_ROW"
-  case "$1" in 02|04|06|08|10) _rowcolor="$C_MENU_ALT" ;; esac
+  local _an="$1" _al="$2" _bn="$3" _bl="$4"
+  local _left_width _right_width _left_label_width _right_label_width
+  local _left_label _right_label _rowcolor
+
+  # Stulpeliai apskaičiuojami pagal terminalo plotį, kad rėmelis nesikreivintų.
   if [ "$_cols" -ge 48 ]; then
-    _left_width=22
-    _right_width=$((_content - _left_width - 1))
-    [ "$_right_width" -lt 10 ] && _right_width=10
-    _a=$(printf '%-*.*s' "$_left_width" "$_left_width" "$_a")
-    _b_len=${#_b_plain}
-    if [ "$_b_len" -gt "$((_right_width - 1))" ]; then
-      _b_plain=$(printf '%-*.*s' "$((_right_width - 1))" "$((_right_width - 1))" "$_b_plain")
-      _b_len=${#_b_plain}
-    fi
-    _pad=$((_right_width - _b_len))
-    [ "$_pad" -lt 0 ] && _pad=0
-    printf '%s%b| %b%-*s%b %b%s%b%*s |%b\n' "$_prefix" "$_rowcolor" "$C_NUMBER" "$_left_width" "$_a" "$_rowcolor" "$C_TEXT" "$_b_plain" "$_rowcolor" "$_pad" '' "$C_RESET"
+    _left_width=$(((_content - 5) / 2))
+    _right_width=$((_content - 5 - _left_width))
+    _left_label_width=$((_left_width - 5))
+    _right_label_width=$((_right_width - 5))
+    [ "$_left_label_width" -lt 1 ] && _left_label_width=1
+    [ "$_right_label_width" -lt 1 ] && _right_label_width=1
+
+    _left_label=$(printf '%-*.*s' "$_left_label_width" "$_left_label_width" "$_al")
+    _right_label=$(printf '%-*.*s' "$_right_label_width" "$_right_label_width" "$_bl")
+    _rowcolor="$C_TEXT"
+    case "$_an" in 02|04|06|08|10) _rowcolor="$C_MENU_ALT" ;; esac
+
+    # Numeriai spalvinami atskirai; tekstas lieka įskaitomas, abi pusės vienodo pločio.
+    printf '%s%b| %b[%s]%b %-*s %b[%s]%b %-*s |%b\n' \
+      "$_prefix" "$C_BORDER" \
+      "$C_NUMBER" "$_an" "$_rowcolor" "$((_left_label_width))" "$_left_label" \
+      "$C_NUMBER" "$_bn" "$C_TEXT" "$((_right_label_width))" "$_right_label" "$C_RESET"
   else
-    _row "$C_MENU_ROW" "$_a"
-    _row "$C_MENU_ALT" "$_b_plain"
+    # Siaurame telefone rodyti po vieną pilno pločio eilutę, neardant rėmelio.
+    _row "$C_NUMBER" "[$_an] $_al"
+    _row "$C_NUMBER" "[$_bn] $_bl"
   fi
 }
-
 _center_line() {
   local _text="$1" _pad _right
   [ "${#_text}" -gt "$_content" ] && _text="${_text:0:_content}"
