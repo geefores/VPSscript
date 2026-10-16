@@ -55,150 +55,131 @@ SCOLOR='\033[0m'
 	}
 
 	inst_sqd() {
-		if netstat -nltp | grep 'squid' 1>/dev/null 2>/dev/null; then
-			echo -e "\E[41;1;37m            PASALINTI SQUID PROXY              \E[0m"
-			echo ""
-			echo -ne "\033[1;32mTIKRAI NORITE PASALINTI SQUID \033[1;31m? \033[1;33m[s/n]:\033[1;37m "
-			read resp
-			[[ "$resp" = 's' ]] && {
-				echo -e "\n\033[1;32mPASALINAMAS SQUID PROXY !\033[0m"
-				echo ""
-				rem_sqd() {
-					[[ -d "/etc/squid" ]] && {
-						apt-get remove squid -y >/dev/null 2>&1
-						apt-get purge squid -y >/dev/null 2>&1
-						rm -rf /etc/squid >/dev/null 2>&1
-					}
-					[[ -d "/etc/squid3" ]] && {
-						apt-get remove squid3 -y >/dev/null 2>&1
-						apt-get purge squid3 -y >/dev/null 2>&1
-						rm -rf /etc/squid3 >/dev/null 2>&1
-						apt autoremove -y >/dev/null 2>&1
-					}
-				}
-				fun_bar 'rem_sqd'
-				echo -e "\n\033[1;32mSQUID PASALINTAS SEKMINGAI !\033[0m"
-				sleep 2
-				clear
-				fun_conexao
-			} || {
-				echo -e "\n\033[1;31mGriztama...\033[0m"
-				sleep 2
-				clear
-				fun_conexao
-			}
-		else
-			clear
-			echo -e "\E[44;1;37m              SQUID DIEGIMAS                \E[0m"
-			echo ""
-			IP=$(wget -qO- ipv4.icanhazip.com)
-			echo -ne "\033[1;32mKAD TESTI PATVIRTINKITE SAVO IP: \033[1;37m"
-			read -e -i $IP ipdovps
-			[[ -z "$ipdovps" ]] && {
-				echo -e "\n\033[1;31mBlogas IP\033[1;32m"
-				echo ""
-				read -p "Iveskite savo IP: " IP
-			}
-			echo -e "\n\033[1;33mKURI PORT NORITE NAUDOTI SQUID \033[1;31m?"
-			echo -e "\n\033[1;33m[\033[1;31m!\033[1;33m] \033[1;32mIVESKITE PORTA ARBA SEKA \033[1;33mPVZ: \033[1;37m80 8080"
-			echo ""
-			echo -ne "\033[1;32mIVESKITE PORTA\033[1;37m: "
-			read portass
-			[[ -z "$portass" ]] && {
-				echo -e "\n\033[1;31mBlogas Portas!"
-				sleep 3
-				fun_conexao
-			}
-			for porta in $(echo -e $portass); do
-				verif_ptrs $porta
-			done
-			[[ $(grep -wc '14' /etc/issue.net) != '0' ]] || [[ $(grep -wc '8' /etc/issue.net) != '0' ]] && {
-				echo -e "\n\033[1;32mDIEGIAMAS SQUID PROXY\033[0m\n"
-				fun_bar 'apt update -y' "apt install squid3 -y"
-			} || {
-				echo -e "\n\033[1;31m[\033[1;36m1\033[1;31m] \033[1;37m• \033[1;33mSQUID VERSIJA 3.3.X\n\033[1;31m[\033[1;36m2\033[1;31m] \033[1;37m• \033[1;33mSQUID VERSIJA 3.5.X\033[0m\n"
-				read -p "$(echo -e "\033[1;32mPasirinkite squid versija \033[1;37m: ")" -e -i 1 opc
-				[[ -z "$opc" ]] && {
-					echo -e "\n\033[1;31mBloga parinktis !"
-					sleep 2
-					fun_conexao
-				}
-				[[ "$opc" != '1' ]] && {
-					[[ "$opc" != '2' ]] && {
-						echo -e "\n\033[1;31mBloga parinktis !"
-						sleep 2
-						fun_conexao
-					}
-				}
-				echo -e "\n\033[1;32mDIEGIAMAS SQUID PROXY\033[0m\n"
-				fun_bar 'apt update -y' "instsqd $opc"
-			}
-			if [[ -d "/etc/squid/" ]]; then
-				var_sqd="/etc/squid/squid.conf"
-				var_pay="/etc/squid/payload.txt"
-			elif [[ -d "/etc/squid3/" ]]; then
-				var_sqd="/etc/squid3/squid.conf"
-				var_pay="/etc/squid3/payload.txt"
+		local conf="/etc/squid/squid.conf" pay="/etc/squid/payload.txt" tmp ports port public_ip
+		if command -v squid >/dev/null 2>&1 && systemctl is-active --quiet squid; then
+			echo -e "\E[41;1;37m            PAŠALINTI SQUID PROXY              \E[0m"
+			read -r -p "Tikrai pašalinti Squid paketą? Konfigūracija bus išsaugota [s/n]: " resp
+			if [[ "$resp" =~ ^[sS]$ ]]; then
+				[[ -f "$conf" ]] && cp -a "$conf" "${conf}.backup.$(date +%Y%m%d-%H%M%S)"
+				apt-get remove -y squid
+				echo -e "\n\033[1;32mSquid paketas pašalintas; konfigūracija neištrinta.\033[0m"
 			else
-				echo -e "\n\033[1;33m[\033[1;31mKLAIDA\033[1;33m]\033[1;37m: \033[1;33mSQUID PROXY PALEISTAS\033[0m"
+				echo -e "\n\033[1;31mVeiksmas atšauktas.\033[0m"
+			fi
+			sleep 2
+			fun_conexao
+			return
+		fi
+
+		clear
+		echo -e "\E[44;1;37m          SQUID PROXY DIEGIMAS / KONFIGŪRAVIMAS          \E[0m"
+		if [[ $EUID -ne 0 ]]; then
+			echo -e "\n\033[1;31mSquid diegimui reikia root teisių.\033[0m"
+			read -r -p "Spauskite ENTER..."
+			fun_conexao
+			return
+		fi
+
+		public_ip=$(wget -qO- --timeout=5 https://api.ipify.org 2>/dev/null || true)
+		read -r -e -i "$public_ip" -p "Patvirtinkite VPS viešą IP: " ipdovps
+		if [[ -z "$ipdovps" ]] || ! [[ "$ipdovps" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+			echo -e "\n\033[1;31mNeteisingas IPv4 adresas.\033[0m"
+			sleep 2
+			fun_conexao
+			return
+		fi
+
+		read -r -p "Įveskite Squid TCP prievadą(-us), pvz. 8080 arba 8080 3128: " ports
+		if [[ -z "$ports" ]]; then
+			echo -e "\n\033[1;31mPrievadai nenurodyti.\033[0m"
+			sleep 2
+			fun_conexao
+			return
+		fi
+		for port in $ports; do
+			if ! [[ "$port" =~ ^[0-9]{1,5}$ ]] || (( port < 1 || port > 65535 )); then
+				echo -e "\n\033[1;31mNeteisingas prievadas: $port\033[0m"
 				sleep 2
 				fun_conexao
+				return
 			fi
-			cat <<-EOF >$var_pay
-				.whatsapp.net/
-				.facebook.net/
-				.twitter.com/
-				.speedtest.net/
-			EOF
-			cat <<-EOF >$var_sqd
-				acl url1 dstdomain -i 127.0.0.1
-				acl url2 dstdomain -i localhost
-				acl url3 dstdomain -i $ipdovps
-				acl url4 dstdomain -i /SSHPLUS?
-				acl payload url_regex -i "$var_pay"
-				acl all src 0.0.0.0/0
+			if command -v ss >/dev/null 2>&1 && ss -H -ltn "sport = :$port" | grep -q .; then
+				echo -e "\n\033[1;31mPrievadas $port jau naudojamas. Pasirinkite kitą.\033[0m"
+				sleep 2
+				fun_conexao
+				return
+			fi
+		done
 
-				http_access allow url1
-				http_access allow url2
-				http_access allow url3
-				http_access allow url4
-				http_access allow payload
-				http_access deny all
-				 
-				#Portas
-			EOF
-			for Pts in $(echo -e $portass); do
-				echo -e "http_port $Pts" >>$var_sqd
-				[[ -f "/usr/sbin/ufw" ]] && ufw allow $Pts/tcp
-			done
-			cat <<-EOF >>$var_sqd
-				#Nome squid
-				visible_hostname SSHPLUS 
-				via off
-				forwarded_for off
-				pipeline_prefetch off
-			EOF
-			sqd_conf() {
-				[[ -d "/etc/squid/" ]] && {
-					service ssh restart
-					/etc/init.d/squid restart
-					service squid restart
-				}
-				[[ -d "/etc/squid3/" ]] && {
-					service ssh restart
-					/etc/init.d/squid3 restart
-					service squid3 restart
-				}
-			}
-			echo -e "\n\033[1;32mKONFIGURUOJAMAS SQUID PROXY\033[0m"
-			echo ""
-			fun_bar 'sqd_conf'
-			echo -e "\n\033[1;32mSQUID IDIEGTAS SEKMINGAI!\033[0m"
-			sleep 2.5s
+		echo -e "\n\033[1;32mDiegiamas Ubuntu/Debian saugyklos palaikomas Squid paketas...\033[0m"
+		if ! apt-get update || ! DEBIAN_FRONTEND=noninteractive apt-get install -y squid; then
+			echo -e "\n\033[1;31mSquid įdiegti nepavyko. Patikrinkite apt klaidas.\033[0m"
+			read -r -p "Spauskite ENTER..."
 			fun_conexao
+			return
 		fi
-	}
+		if ! command -v squid >/dev/null 2>&1; then
+			echo -e "\n\033[1;31mPaketas įdiegtas, bet squid vykdomoji programa nerasta.\033[0m"
+			fun_conexao
+			return
+		fi
 
+		mkdir -p /etc/squid
+		[[ -f "$conf" ]] && cp -a "$conf" "${conf}.backup.$(date +%Y%m%d-%H%M%S)"
+		[[ -f "$pay" ]] && cp -a "$pay" "${pay}.backup.$(date +%Y%m%d-%H%M%S)"
+		cat > "$pay" <<'PAYLOAD_EOF'
+.whatsapp.net/
+.facebook.net/
+.twitter.com/
+.speedtest.net/
+PAYLOAD_EOF
+		tmp=$(mktemp /etc/squid/squid.conf.test.XXXXXX) || { echo "Nepavyko sukurti laikino konfigūracijos failo."; fun_conexao; return; }
+		{
+			cat <<EOF
+acl localhost_src src 127.0.0.1/32 ::1
+acl local_host dstdomain -i localhost
+acl server_ip dstdomain -i $ipdovps
+acl legacy_path dstdomain -i /SSHPLUS?
+acl payload url_regex -i "$pay"
+http_access allow localhost_src
+http_access allow local_host
+http_access allow server_ip
+http_access allow legacy_path
+http_access allow payload
+http_access deny all
+EOF
+			for port in $ports; do printf 'http_port %s\n' "$port"; done
+			cat <<'EOF'
+visible_hostname SSHPLUS
+via off
+forwarded_for off
+pipeline_prefetch off
+EOF
+		} > "$tmp"
+		if ! squid -k parse -f "$tmp"; then
+			rm -f "$tmp"
+			echo -e "\n\033[1;31mSquid konfigūracijos patikra nepavyko. Esama konfigūracija nepakeista.\033[0m"
+			read -r -p "Spauskite ENTER..."
+			fun_conexao
+			return
+		fi
+		install -o root -g root -m 0644 "$tmp" "$conf"
+		rm -f "$tmp"
+		if command -v ufw >/dev/null 2>&1; then
+			for port in $ports; do ufw allow "$port/tcp" >/dev/null || true; done
+		fi
+		if ! squid -k parse -f "$conf" || ! systemctl restart squid || ! systemctl is-active --quiet squid; then
+			echo -e "\n\033[1;31mSquid nepasileido. Atkuriama paskutinė konfigūracijos atsarginė kopija, jei ji yra.\033[0m"
+			latest=$(ls -1t /etc/squid/squid.conf.backup.* 2>/dev/null | head -n1)
+			[[ -n "$latest" ]] && cp -a "$latest" "$conf"
+			systemctl restart squid >/dev/null 2>&1 || true
+		else
+			echo -e "\n\033[1;32mSquid veikia. Versija: $(squid -v 2>&1 | head -n1)\033[0m"
+			echo -e "\033[1;32mPrievadai: $ports\033[0m"
+		fi
+		sleep 3
+		fun_conexao
+	}
 	addpt_sqd() {
 		echo -e "\E[44;1;37m         PRIDETI SQUID PORTA         \E[0m"
 		echo -e "\n\033[1;33mNAUDOJAMAS PORTAS: \033[1;32m$sqdp\n"
@@ -228,7 +209,7 @@ SCOLOR='\033[0m'
 		fun_bar 'sleep 2'
 		echo -e "\n\033[1;32mKONFIGURUOJAMAS SQUID!"
 		echo ""
-		fun_bar 'service squid restart' 'service squid3 restart'
+		fun_bar 'squid -k parse' 'systemctl restart squid'
 		echo -e "\n\033[1;32mSEKMINGAI PRIDETAS PORTAS!"
 		sleep 3
 		clear
@@ -264,7 +245,7 @@ SCOLOR='\033[0m'
 			fun_bar 'sleep 3'
 			echo -e "\n\033[1;32mKONFIGURUOJAMAS SQUID!"
 			echo ""
-			fun_bar 'service squid restart' 'service squid3 restart'
+			fun_bar 'squid -k parse' 'systemctl restart squid'
 			echo -e "\n\033[1;32mSEKMINGAI PASALINTAS SQUID PORTAS!"
 			sleep 3.5s
 			clear
@@ -278,10 +259,11 @@ SCOLOR='\033[0m'
 	}
 
 	fun_squid() {
-		[[ "$(netstat -nplt | grep -c 'squid')" = "0" ]] && inst_sqd
+		[[ ! -x /usr/sbin/squid ]] && inst_sqd
+		[[ -x /usr/sbin/squid ]] && ! systemctl is-active --quiet squid && inst_sqd
 		echo -e "\E[44;1;37m          VALDYTI SQUID PROXY           \E[0m"
-		[[ "$(netstat -nplt | grep -c 'squid')" != "0" ]] && {
-			sqdp=$(netstat -nplt | grep 'squid' | awk -F ":" {'print $4'} | xargs)
+		[[ -x /usr/sbin/squid ]] && systemctl is-active --quiet squid && {
+			sqdp=$(ss -H -ltnp 2>/dev/null | awk '/squid/ {n=split($4,a,":"); print a[n]}' | sort -nu | xargs)
 			echo -e "\n\033[1;33mPORTAS\033[1;37m: \033[1;32m$sqdp"
 			VarSqdOn="PASALINTI SQUID PROXY"
 		} || {
