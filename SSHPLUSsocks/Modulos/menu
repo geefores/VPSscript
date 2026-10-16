@@ -430,33 +430,25 @@ _section() {
 
 _menurow() {
   local _an="$1" _al="$2" _bn="$3" _bl="$4"
-  local _left_width _right_width _left_label_width _right_label_width
-  local _left_label _right_label _rowcolor
-  # Remove embedded ANSI sequences from status labels so they cannot widen rows.
-  _al=$(printf '%s' "$_al" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
-  _bl=$(printf '%s' "$_bl" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
+  local _left_label_width _right_label_width _left_label _right_label
 
-  # Stulpeliai apskaičiuojami pagal terminalo plotį, kad rėmelis nesikreivintų.
+  # Vienodas bendras plotis: kiekvienos eilutes desine krastine sutampa su remeliu.
+  # Eilutes viduje: tarpas + [NN] + tarpas + pavadinimas (du stulpeliai).
   if [ "$_cols" -ge 48 ]; then
-    _left_width=$(((_content - 5) / 2))
-    _right_width=$((_content - 5 - _left_width))
-    _left_label_width=$((_left_width - 5))
-    _right_label_width=$((_right_width - 5))
-    [ "$_left_label_width" -lt 1 ] && _left_label_width=1
-    [ "$_right_label_width" -lt 1 ] && _right_label_width=1
+    _left_label_width=$(( (_content - 13) / 2 ))
+    _right_label_width=$((_content - 13 - _left_label_width))
+    [ "$_left_label_width" -ge 1 ] || _left_label_width=1
+    [ "$_right_label_width" -ge 1 ] || _right_label_width=1
 
     _left_label=$(printf '%-*.*s' "$_left_label_width" "$_left_label_width" "$_al")
     _right_label=$(printf '%-*.*s' "$_right_label_width" "$_right_label_width" "$_bl")
-    _rowcolor="$C_TEXT"
-    case "$_an" in 02|04|06|08|10) _rowcolor="$C_MENU_ALT" ;; esac
 
-    # Numeriai spalvinami atskirai; tekstas lieka įskaitomas, abi pusės vienodo pločio.
     printf '%s%b| %b[%s]%b %-*s %b[%s]%b %-*s |%b\n' \
       "$_prefix" "$C_BORDER" \
-      "$C_NUMBER" "$_an" "$_rowcolor" "$((_left_label_width))" "$_left_label" \
+      "$C_NUMBER" "$_an" "$C_TEXT" "$((_left_label_width))" "$_left_label" \
       "$C_NUMBER" "$_bn" "$C_TEXT" "$((_right_label_width))" "$_right_label" "$C_RESET"
   else
-    # Siaurame telefone rodyti po vieną pilno pločio eilutę, neardant rėmelio.
+    # Siaurame ekrane po viena pasirinkima eiluteje, kad niekas nebutu nukirpta.
     _row "$C_NUMBER" "[$_an] $_al"
     _row "$C_NUMBER" "[$_bn] $_bl"
   fi
@@ -492,7 +484,7 @@ _row "$C_TEXT" "UDP: ${_short_udp}  Veikia: ${_short_methods}"
 _border "$C_BORDER"
 
 # Blue title bar matching the "Sukurti SSH vartotoja" screen.
-printf '%s%b+-- PAGRINDINIS MENIU %s+%b\n' "$_prefix" "$C_MENU" "$(printf '%*s' "$((_inner - 20))" '' | tr ' ' '-')" "$C_RESET"
+_section "$C_MENU" 'PAGRINDINIS MENIU'
 _menurow '01' 'Kurti'      '11' 'Greitis'
 _menurow '02' 'Bandomas'   '12' 'Banneris'
 _menurow '03' 'Salinti'   '13' 'Trafikas'
