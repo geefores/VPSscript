@@ -504,25 +504,26 @@ EOF
 					fi
 				}
 				if ! fun_ports || ! grep -q "^DROPBEAR_PORT=$((10#$porta))$" /etc/default/dropbear; then
-				cp -p "$backup_dropbear" /etc/default/dropbear
-				rm -f "$backup_dropbear"
-				echo -e "\n\033[1;31mNepavyko sukonfigūruoti Dropbear; nustatymai atkurti.\033[0m"
-				fun_conexao
-				return
-			fi
-			# Dropbear veikimui nereikia keisti OpenSSH sshd_config.
-			echo -e "\n\033[1;32mPaleidžiamas Dropbear ir tikrinamas portas...\033[0m"
-			if systemctl restart dropbear && systemctl is-active --quiet dropbear && ss -H -ltn "sport = :$((10#$porta))" | grep -q .; then
-				rm -f "$backup_dropbear"
-				echo -e "\n\033[1;32mDROPBEAR VEIKIA. PORTAS: $((10#$porta))\033[0m"
-			else
-				cp -p "$backup_dropbear" /etc/default/dropbear
-				systemctl restart dropbear >/dev/null 2>&1 || true
-				rm -f "$backup_dropbear"
-				echo -e "\n\033[1;31mDropbear nepasileido arba portas neklausomas. Konfigūracija atkurta; patikrinkite journalctl -u dropbear.\033[0m"
-				fun_conexao
-				return
-			fi
+					cp -p "$backup_dropbear" /etc/default/dropbear
+					rm -f "$backup_dropbear"
+					echo -e "\n\033[1;31mNepavyko sukonfigūruoti Dropbear; nustatymai atkurti.\033[0m"
+					fun_conexao
+					return
+				fi
+				# Dropbear veikimui nereikia keisti OpenSSH sshd_config.
+				echo -e "\n\033[1;32mPaleidžiamas Dropbear ir tikrinamas portas...\033[0m"
+				if systemctl restart dropbear && systemctl is-active --quiet dropbear && ss -H -ltn "sport = :$((10#$porta))" | grep -q .; then
+					rm -f "$backup_dropbear"
+					echo -e "\n\033[1;32mDROPBEAR VEIKIA. PORTAS: $((10#$porta))\033[0m"
+				else
+					cp -p "$backup_dropbear" /etc/default/dropbear
+					systemctl restart dropbear >/dev/null 2>&1 || true
+					rm -f "$backup_dropbear"
+					echo -e "\n\033[1;31mDropbear nepasileido arba portas neklausomas. Konfigūracija atkurta; patikrinkite journalctl -u dropbear.\033[0m"
+					fun_conexao
+					return
+				fi
+
 				[[ $(grep -c "/bin/false" /etc/shells) = '0' ]] && echo "/bin/false" >>/etc/shells
 				sleep 2
 				clear
