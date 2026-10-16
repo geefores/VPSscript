@@ -207,11 +207,17 @@ EOF
 	squid_apply_candidate() {
 		local cfg="$1" candidate="$2" backup
 		[[ -f "$cfg" && -f "$candidate" ]] || return 1
-		if ! squid -k parse -f "$candidate"; then
-			echo -e "\n\033[1;31mKonfigūracijos patikra nepavyko. Pakeitimas atšauktas.\033[0m"
+		local parse_log
+		parse_log=$(mktemp /tmp/squid-parse.XXXXXX.log) || { rm -f "$candidate"; return 1; }
+		if ! squid -k parse -f "$candidate" >"$parse_log" 2>&1; then
+			echo -e "\n\033[1;31mSquid konfigūracijos patikra nepavyko. Klaidos išvestis:\033[0m"
+			cat "$parse_log"
+			echo "Diagnostikos žurnalas: $parse_log"
+			echo -e "\033[1;33mEsama konfigūracija nepakeista.\033[0m"
 			rm -f "$candidate"
 			return 1
 		fi
+		rm -f "$parse_log"
 		backup="${cfg}.backup.$(date +%Y%m%d-%H%M%S)"
 		cp -a "$cfg" "$backup" || { rm -f "$candidate"; return 1; }
 		install -o root -g root -m 0644 "$candidate" "$cfg" || { rm -f "$candidate"; return 1; }
