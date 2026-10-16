@@ -96,13 +96,28 @@ SCOLOR='\033[0m'
 			fun_conexao
 			return
 		fi
+		local normalized_ports=""
 		for port in $ports; do
-			if ! [[ "$port" =~ ^[0-9]{1,5}$ ]] || (( port < 1 || port > 65535 )); then
+			if ! [[ "$port" =~ ^[0-9]{1,5}$ ]]; then
 				echo -e "\n\033[1;31mNeteisingas prievadas: $port\033[0m"
 				sleep 2
 				fun_conexao
 				return
 			fi
+			port=$((10#$port))
+			if (( port < 1 || port > 65535 )); then
+				echo -e "\n\033[1;31mNeteisingas prievadas: $port\033[0m"
+				sleep 2
+				fun_conexao
+				return
+			fi
+			if [[ " $normalized_ports " == *" $port "* ]]; then
+				echo -e "\n\033[1;33mPrievadas $port nurodytas daugiau nei vieną kartą.\033[0m"
+				sleep 2
+				fun_conexao
+				return
+			fi
+			normalized_ports+=" $port"
 			if command -v ss >/dev/null 2>&1 && ss -H -ltn "sport = :$port" | grep -q .; then
 				echo -e "\n\033[1;31mPrievadas $port jau naudojamas. Pasirinkite kitą.\033[0m"
 				sleep 2
@@ -217,7 +232,11 @@ EOF
 		elif [[ -f /etc/squid3/squid.conf ]]; then cfg=/etc/squid3/squid.conf
 		else echo -e "\n\033[1;31mSQUID KONFIGŪRACIJA NERASTA!\033[0m"; sleep 2; fun_squid; return; fi
 		read -r -p "Kokį TCP prievadą pridėti? " pt
-		if ! [[ "$pt" =~ ^[0-9]{1,5}$ ]] || (( pt < 1 || pt > 65535 )); then
+		if ! [[ "$pt" =~ ^[0-9]{1,5}$ ]]; then
+			echo -e "\n\033[1;31mNeteisingas prievadas.\033[0m"; sleep 2; fun_squid; return
+		fi
+		pt=$((10#$pt))
+		if (( pt < 1 || pt > 65535 )); then
 			echo -e "\n\033[1;31mNeteisingas prievadas.\033[0m"; sleep 2; fun_squid; return
 		fi
 		if ss -H -ltn "sport = :$pt" 2>/dev/null | grep -q . && ! grep -Eq "^[[:space:]]*http_port[[:space:]]+${pt}([[:space:]]|$)" "$cfg"; then
@@ -242,7 +261,11 @@ EOF
 		elif [[ -f /etc/squid3/squid.conf ]]; then cfg=/etc/squid3/squid.conf
 		else echo -e "\n\033[1;31mSQUID KONFIGŪRACIJA NERASTA!\033[0m"; sleep 2; fun_squid; return; fi
 		read -r -p "Kokį TCP prievadą pašalinti? " pt
-		if ! [[ "$pt" =~ ^[0-9]{1,5}$ ]] || (( pt < 1 || pt > 65535 )); then
+		if ! [[ "$pt" =~ ^[0-9]{1,5}$ ]]; then
+			echo -e "\n\033[1;31mNeteisingas prievadas.\033[0m"; sleep 2; fun_squid; return
+		fi
+		pt=$((10#$pt))
+		if (( pt < 1 || pt > 65535 )); then
 			echo -e "\n\033[1;31mNeteisingas prievadas.\033[0m"; sleep 2; fun_squid; return
 		fi
 		if ! grep -Eq "^[[:space:]]*http_port[[:space:]]+${pt}([[:space:]]|$)" "$cfg"; then
