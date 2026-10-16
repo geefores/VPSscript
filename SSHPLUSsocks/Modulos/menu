@@ -324,8 +324,9 @@ esac
 while true $x != "ok"
 do
 stsl=$(ps x | grep "limiter"|grep -v grep > /dev/null && echo -e "\033[1;32m* " || echo -e "\033[1;31mo ")
-stson=$(ps x | grep "onlineapp"|grep -v grep > /dev/null && echo -e "\033[1;32m* " || echo -e "\033[1;31mo ")
-stsu=$(ps x | grep "udpvpn"|grep -v grep > /dev/null && echo -e "\033[1;32m* " || echo -e "\033[1;31mo ")
+# Keep status markers free of embedded ANSI codes; embedded colors break column alignment.
+stson=$(ps x | grep "onlineapp" | grep -v grep >/dev/null && printf '* ' || printf 'o ')
+stsu=$(ps x | grep "udpvpn" | grep -v grep >/dev/null && printf '* ' || printf 'o ')
 # OS versiją imame iš /etc/os-release, o ne /etc/issue.net (jame gali būti HTML).
 if [ -r /etc/os-release ]; then
   . /etc/os-release
