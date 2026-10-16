@@ -55,7 +55,7 @@ SCOLOR='\033[0m'
 	}
 
 	inst_sqd() {
-		local conf="/etc/squid/squid.conf" pay="/etc/squid/payload.txt" tmp ports port public_ip
+		local conf="/etc/squid/squid.conf" pay="/etc/squid/payload.txt" tmp ports port public_ip conf_backup="" pay_backup=""
 		if command -v squid >/dev/null 2>&1 && systemctl is-active --quiet squid; then
 			echo -e "\E[41;1;37m            PAŠALINTI SQUID PROXY              \E[0m"
 			read -r -p "Tikrai pašalinti Squid paketą? Konfigūracija bus išsaugota [s/n]: " resp
@@ -125,27 +125,32 @@ SCOLOR='\033[0m'
 		fi
 
 		mkdir -p /etc/squid
-		[[ -f "$conf" ]] && cp -a "$conf" "${conf}.backup.$(date +%Y%m%d-%H%M%S)"
-		[[ -f "$pay" ]] && cp -a "$pay" "${pay}.backup.$(date +%Y%m%d-%H%M%S)"
+		if [[ -f "$conf" ]]; then
+			conf_backup="${conf}.backup.$(date +%Y%m%d-%H%M%S)"
+			cp -a "$conf" "$conf_backup" || { echo "Nepavyko sukurti squid.conf atsarginės kopijos."; fun_conexao; return; }
+		fi
+		if [[ -f "$pay" ]]; then
+			pay_backup="${pay}.backup.$(date +%Y%m%d-%H%M%S)"
+			cp -a "$pay" "$pay_backup" || { echo "Nepavyko sukurti payload.txt atsarginės kopijos."; fun_conexao; return; }
+		fi
 		cat > "$pay" <<'PAYLOAD_EOF'
-.whatsapp.net/
-.facebook.net/
-.twitter.com/
-.speedtest.net/
+.whatsapp.net
+.facebook.net
+.twitter.com
+.speedtest.net
 PAYLOAD_EOF
 		tmp=$(mktemp /etc/squid/squid.conf.test.XXXXXX) || { echo "Nepavyko sukurti laikino konfigūracijos failo."; fun_conexao; return; }
 		{
 			cat <<EOF
 acl localhost_src src 127.0.0.1/32 ::1
-acl local_host dstdomain -i localhost
-acl server_ip dstdomain -i $ipdovps
-acl legacy_path dstdomain -i /SSHPLUS?
-acl payload url_regex -i "$pay"
+acl Safe_ports port 80 443 1025-65535
+acl SSL_ports port 443
+acl CONNECT method CONNECT
+acl payload_domains dstdomain -i "$pay"
+http_access deny !Safe_ports
+http_access deny CONNECT !SSL_ports
 http_access allow localhost_src
-http_access allow local_host
-http_access allow server_ip
-http_access allow legacy_path
-http_access allow payload
+http_access allow payload_domains
 http_access deny all
 EOF
 			for port in $ports; do printf 'http_port %s\n' "$port"; done
@@ -169,9 +174,12 @@ EOF
 			for port in $ports; do ufw allow "$port/tcp" >/dev/null || true; done
 		fi
 		if ! squid -k parse -f "$conf" || ! systemctl restart squid || ! systemctl is-active --quiet squid; then
-			echo -e "\n\033[1;31mSquid nepasileido. Atkuriama paskutinė konfigūracijos atsarginė kopija, jei ji yra.\033[0m"
-			latest=$(ls -1t /etc/squid/squid.conf.backup.* 2>/dev/null | head -n1)
-			[[ -n "$latest" ]] && cp -a "$latest" "$conf"
+			echo -e "\n\033[1;31mSquid nepasileido. Atkuriama būtent prieš pakeitimą buvusi konfigūracija.\033[0m"
+			if [[ -n "$conf_backup" && -f "$conf_backup" ]]; then
+				cp -a "$conf_backup" "$conf"
+			else
+				rm -f "$conf"
+			fi
 			systemctl restart squid >/dev/null 2>&1 || true
 		else
 			echo -e "\n\033[1;32mSquid veikia. Versija: $(squid -v 2>&1 | head -n1)\033[0m"
@@ -239,6 +247,9 @@ EOF
 		fi
 		if ! grep -Eq "^[[:space:]]*http_port[[:space:]]+${pt}([[:space:]]|$)" "$cfg"; then
 			echo -e "\n\033[1;31mPrievadas $pt konfigūracijoje nerastas.\033[0m"; sleep 2; fun_squid; return
+		fi
+		if [[ $(grep -Ec "^[[:space:]]*http_port[[:space:]]+[^[:space:]]+" "$cfg") -le 1 ]]; then
+			echo -e "\n\033[1;31mNegalima pašalinti paskutinio Squid prievado.\033[0m"; sleep 2; fun_squid; return
 		fi
 		candidate=$(mktemp) || { fun_squid; return; }
 		awk -v p="$pt" '$1=="http_port" && $2==p {next} {print}' "$cfg" > "$candidate"
