@@ -402,7 +402,7 @@ C_SYSTEM='\033[1;37;44m'       # blue heading only
 C_USERS='\033[1;37;44m'        # blue heading only
 C_SERVER='\033[1;37;44m'       # blue heading only
 C_MENU='\033[1;37;44m'      # blue menu heading
-C_NUMBER='\033[1;36m'       # cyan menu numbers
+C_NUMBER='\033[1;94m'       # bright blue menu numbers
 C_NUM='\033[1;37m'
 C_TEXT='\033[1;37m'
 C_SERVICE='\033[1;32m'      # green service status
@@ -432,6 +432,9 @@ _menurow() {
   local _an="$1" _al="$2" _bn="$3" _bl="$4"
   local _left_width _right_width _left_label_width _right_label_width
   local _left_label _right_label _rowcolor
+  # Remove embedded ANSI sequences from status labels so they cannot widen rows.
+  _al=$(printf '%s' "$_al" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
+  _bl=$(printf '%s' "$_bl" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g')
 
   # Stulpeliai apskaičiuojami pagal terminalo plotį, kad rėmelis nesikreivintų.
   if [ "$_cols" -ge 48 ]; then
