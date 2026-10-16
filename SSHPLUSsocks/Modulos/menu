@@ -402,6 +402,7 @@ C_SYSTEM='\033[1;37;44m'       # blue heading only
 C_USERS='\033[1;37;44m'        # blue heading only
 C_SERVER='\033[1;37;44m'       # blue heading only
 C_MENU='\033[1;37;44m'      # blue menu heading
+C_NUMBER='\033[1;36m'       # cyan menu numbers
 C_NUM='\033[1;37m'
 C_TEXT='\033[1;37m'
 C_SERVICE='\033[1;32m'      # green service status
@@ -445,7 +446,7 @@ _menurow() {
     fi
     _pad=$((_right_width - _b_len))
     [ "$_pad" -lt 0 ] && _pad=0
-    printf '%s%b| %-*s %s%*s |%b\n' "$_prefix" "$_rowcolor" "$_left_width" "$_a" "$_b_plain" "$_pad" '' "$C_RESET"
+    printf '%s%b| %b%-*s%b %b%s%b%*s |%b\n' "$_prefix" "$_rowcolor" "$C_NUMBER" "$_left_width" "$_a" "$_rowcolor" "$C_TEXT" "$_b_plain" "$_rowcolor" "$_pad" '' "$C_RESET"
   else
     _row "$C_MENU_ROW" "$_a"
     _row "$C_MENU_ALT" "$_b_plain"
