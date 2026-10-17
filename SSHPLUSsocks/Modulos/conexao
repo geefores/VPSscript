@@ -334,15 +334,15 @@ EOF
 		if netstat -nltp | grep 'dropbear' 1>/dev/null 2>/dev/null; then
 			clear
 			[[ $(netstat -nltp | grep -c 'dropbear') != '0' ]] && dpbr=$(ss -H -ltnp 2>/dev/null | awk '/dropbear/ {addr=$4; sub(/^.*:/, "", addr); gsub(/[^0-9]/, "", addr); if (addr ~ /^[0-9]+$/) print addr}' | sort -nu | xargs) || sqdp="\033[1;31mNEPASIEKIAMAS"
-			if ps x | grep "limiter" | grep -v grep 1>/dev/null 2>/dev/null; then
+			if systemctl is-active --quiet sshplus-session-limiter.service; then
 				stats='\033[1;32m◉ '
 			else
 				stats='\033[1;31m○ '
 			fi
-			echo -e "\E[44;1;37m              VALDYTI DROPBEAR               \E[0m"
-			echo -e "\n\033[1;33mPORTAS\033[1;37m: \033[1;32m$dpbr"
+			echo -e "\E[44;1;37m          VALDYTI PRISIJUNGIMŲ RIBOJIMUS          \E[0m"
+			echo -e "\n\033[1;33mDROPBEAR PORTAI\033[1;37m: \033[1;32m$dpbr"
 			echo ""
-			echo -e "\033[1;31m[\033[1;36m1\033[1;31m] \033[1;37m• \033[1;33mDROPBEAR RIBOJIMAI $stats\033[0m"
+			echo -e "\033[1;31m[\033[1;36m1\033[1;31m] \033[1;37m• \033[1;33mBENDRI VISŲ METODŲ RIBOJIMAI $stats\033[0m"
 			echo -e "\033[1;31m[\033[1;36m2\033[1;31m] \033[1;37m• \033[1;33mKEISTI DROPBEAR PORTA\033[0m"
 			echo -e "\033[1;31m[\033[1;36m3\033[1;31m] \033[1;37m• \033[1;33mPASALINTI DROPBEAR\033[0m"
 			echo -e "\033[1;31m[\033[1;36m0\033[1;31m] \033[1;37m• \033[1;33mGRIZTI\033[0m"
@@ -351,26 +351,25 @@ EOF
 			read resposta
 			if [[ "$resposta" = '1' ]]; then
 				clear
-				if ps x | grep "limiter" | grep -v grep 1>/dev/null 2>/dev/null; then
-					echo -e "\033[1;32mStabdomi ribojimai... \033[0m"
-					echo ""
-					fun_stplimiter() {
-						pidlimiter=$(ps x | grep "limiter" | awk -F "pts" {'print $1'})
-						kill -9 $pidlimiter
-						screen -wipe
-					}
-					fun_bar 'fun_stplimiter' 'sleep 2'
-					echo -e "\n\033[1;31m RIBOJIMAI ISJUNGTI \033[0m"
-					sleep 3
-					fun_drop
+				if systemctl is-active --quiet sshplus-session-limiter.service; then
+					echo -e "\033[1;32mStabdomi bendri ribojimai... \033[0m"
+					systemctl disable --now sshplus-session-limiter.service
+					echo -e "\n\033[1;31m VISŲ METODŲ RIBOJIMAI IŠJUNGTI \033[0m"
 				else
-					echo -e "\n\033[1;32mAktyvuojami ribojimai... \033[0m"
-					echo ""
-					fun_bar 'screen -d -m -t limiter droplimiter' 'sleep 3'
-					echo -e "\n\033[1;32m  RIBOJIMAI IJUNGTI \033[0m"
-					sleep 3
-					fun_drop
+					echo -e "\n\033[1;32mAktyvuojami bendri ribojimai... \033[0m"
+					if [[ ! -x /usr/local/sbin/sshplus-session-limiter.py || ! -f /etc/systemd/system/sshplus-session-limiter.service ]]; then
+						echo -e "\033[1;31mRibojimo tarnyba neįdiegta. Pirmiausia įdiekite atnaujintą SSHPLUS paketą.\033[0m"
+					else
+						systemctl enable --now sshplus-session-limiter.service
+						if systemctl is-active --quiet sshplus-session-limiter.service; then
+							echo -e "\033[1;32mBENDRI RIBOJIMAI ĮJUNGTI\033[0m"
+						else
+							echo -e "\033[1;31mNepavyko paleisti ribojimo tarnybos. Tikrinkite systemctl status.\033[0m"
+						fi
+					fi
 				fi
+				sleep 3
+				fun_drop
 			elif [[ "$resposta" = '2' ]]; then
 				echo ""
 				echo -ne "\033[1;32mKOKI PORTA NORITE NAUDOTI DROPBEAR \033[1;33m?\033[1;37m "
