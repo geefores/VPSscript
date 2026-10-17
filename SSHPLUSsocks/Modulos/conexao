@@ -334,35 +334,36 @@ EOF
 		if netstat -nltp | grep 'dropbear' 1>/dev/null 2>/dev/null; then
 			clear
 			[[ $(netstat -nltp | grep -c 'dropbear') != '0' ]] && dpbr=$(ss -H -ltnp 2>/dev/null | awk '/dropbear/ {addr=$4; sub(/^.*:/, "", addr); gsub(/[^0-9]/, "", addr); if (addr ~ /^[0-9]+$/) print addr}' | sort -nu | xargs) || sqdp="\033[1;31mNEPASIEKIAMAS"
-			if systemctl is-active --quiet sshplus-session-limiter.service; then
+			stats='\033[1;31m○ ' 
+			if systemctl is-active --quiet deinternet-session-limiter.service; then
 				stats='\033[1;32m◉ '
 			else
 				stats='\033[1;31m○ '
 			fi
-			echo -e "\E[44;1;37m          VALDYTI PRISIJUNGIMŲ RIBOJIMUS          \E[0m"
+			echo -e "\E[44;1;37m                DROPBEAR VALDYMAS                \E[0m"
 			echo -e "\n\033[1;33mDROPBEAR PORTAI\033[1;37m: \033[1;32m$dpbr"
 			echo ""
-			echo -e "\033[1;31m[\033[1;36m1\033[1;31m] \033[1;37m• \033[1;33mBENDRI VISŲ METODŲ RIBOJIMAI $stats\033[0m"
-			echo -e "\033[1;31m[\033[1;36m2\033[1;31m] \033[1;37m• \033[1;33mKEISTI DROPBEAR PORTA\033[0m"
-			echo -e "\033[1;31m[\033[1;36m3\033[1;31m] \033[1;37m• \033[1;33mPASALINTI DROPBEAR\033[0m"
-			echo -e "\033[1;31m[\033[1;36m0\033[1;31m] \033[1;37m• \033[1;33mGRIZTI\033[0m"
+			echo -e "\033[1;36m[1] \033[1;37mSesijų ribotuvas (Dropbear + OpenVPN): $stats\033[0m"
+			echo -e "\033[1;36m[2] \033[1;37mKeisti Dropbear prievadą\033[0m"
+			echo -e "\033[1;36m[3] \033[1;37mPašalinti Dropbear\033[0m"
+			echo -e "\033[1;36m[0] \033[1;37mGrįžti\033[0m"
 			echo ""
 			echo -ne "\033[1;32mKA NORITE DARYTI \033[1;33m?\033[1;37m "
 			read resposta
 			if [[ "$resposta" = '1' ]]; then
 				clear
-				if systemctl is-active --quiet sshplus-session-limiter.service; then
+				if systemctl is-active --quiet deinternet-session-limiter.service; then
 					echo -e "\033[1;32mStabdomi bendri ribojimai... \033[0m"
-					systemctl disable --now sshplus-session-limiter.service
+					systemctl disable --now deinternet-session-limiter.service
 					echo -e "\n\033[1;31m VISŲ METODŲ RIBOJIMAI IŠJUNGTI \033[0m"
 				else
 					echo -e "\n\033[1;32mAktyvuojami bendri ribojimai... \033[0m"
-					if [[ ! -x /usr/local/sbin/sshplus-session-limiter.py || ! -f /etc/systemd/system/sshplus-session-limiter.service ]]; then
+					if [[ ! -x /usr/local/sbin/deinternet-session-limiter.py || ! -f /etc/systemd/system/deinternet-session-limiter.service ]]; then
 						echo -e "\033[1;31mRibojimo tarnyba neįdiegta. Pirmiausia įdiekite atnaujintą SSHPLUS paketą.\033[0m"
 					else
-						systemctl enable --now sshplus-session-limiter.service
-						if systemctl is-active --quiet sshplus-session-limiter.service; then
-							echo -e "\033[1;32mBENDRI RIBOJIMAI ĮJUNGTI\033[0m"
+						systemctl enable --now deinternet-session-limiter.service
+						if systemctl is-active --quiet deinternet-session-limiter.service; then
+						echo -e "\033[1;32mBENDRI RIBOJIMAI ĮJUNGTI\033[0m"
 						else
 							echo -e "\033[1;31mNepavyko paleisti ribojimo tarnybos. Tikrinkite systemctl status.\033[0m"
 						fi
@@ -416,6 +417,14 @@ EOF
 				echo -e "\n\033[1;32mDROPBEAR PALEIDZIAMAS IS NAUJO!"
 				echo ""
 				if service dropbear restart && /etc/init.d/dropbear status >/dev/null 2>&1; then
+					if [[ -f /etc/systemd/system/deinternet-session-limiter.service ]]; then
+						if grep -q '^Environment=DROPBEAR_PORT=' /etc/systemd/system/deinternet-session-limiter.service; then
+							sed -i "s/^Environment=DROPBEAR_PORT=.*/Environment=DROPBEAR_PORT=$((10#$pt))/" /etc/systemd/system/deinternet-session-limiter.service
+						else
+							sed -i "/^ExecStart=/i Environment=DROPBEAR_PORT=$((10#$pt))" /etc/systemd/system/deinternet-session-limiter.service
+						fi
+						systemctl daemon-reload && systemctl restart deinternet-session-limiter.service || echo -e "\033[1;33mDropbear veikia, bet ribotuvo tarnybą patikrinkite rankiniu būdu.\033[0m"
+					fi
 					rm -f "$backup_dropbear"
 					echo -e "\n\033[1;32mPORTAS PAKEISTAS SEKMINGAI!"
 				else
@@ -428,20 +437,20 @@ EOF
 				clear
 				fun_conexao
 			elif [[ "$resposta" = '3' ]]; then
-				echo -e "\n\033[1;32mDROPBEAR SALINIMAS !\033[0m"
-				echo ""
-				fun_dropunistall() {
-					service dropbear stop && /etc/init.d/dropbear stop
-					apt-get autoremove dropbear -y
-					apt-get remove dropbear-run -y
-					apt-get remove dropbear -y
-					apt-get purge dropbear -y
-					rm -rf /etc/default/dropbear
-				}
-				fun_bar 'fun_dropunistall'
-				echo -e "\n\033[1;32mDROPBEAR PASALINTAS SEKMINGAI !\033[0m"
-				sleep 3
 				clear
+				echo -e "\033[1;31mDROPBEAR PAŠALINIMAS\033[0m"
+				echo "Tai nutrauks Dropbear ryšius, bet nešalins OpenSSH ar bendro sesijų ribotuvo."
+				read -r -p "Patvirtinkite pašalinimą [s/N]: " confirm_remove
+				if [[ "$confirm_remove" =~ ^[sS]$ ]]; then
+					if ! apt-get remove -y dropbear; then
+						echo -e "\033[1;31mNepavyko pašalinti Dropbear paketo.\033[0m"
+					else
+						echo -e "\033[1;32mDropbear paketas pašalintas. Bendras sesijų ribotuvas paliktas.\033[0m"
+					fi
+				else
+					echo -e "\033[1;33mPašalinimas atšauktas.\033[0m"
+				fi
+				sleep 2
 				fun_conexao
 			elif [[ "$resposta" = '0' ]]; then
 				echo -e "\n\033[1;31mGriztama...\033[0m"
@@ -942,7 +951,7 @@ EOF
 
 				opnp=$(cat /etc/openvpn/server.conf | grep "port" | awk {'print $2'})
 				[[ -d /var/www/html/openvpn ]] && {
-					ovpnweb=$(echo -e "\033[1;32m◉ ")
+					ovpnweb=$(echo -e "\033[1;32m● ")
 				} || {
 					ovpnweb=$(echo -e "\033[1;31m○ ")
 				}
