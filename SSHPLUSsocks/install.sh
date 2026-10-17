@@ -64,7 +64,7 @@ function InstUpdates(){
 
 function InstSessionLimiter(){
  echo -e "\e[1;37mInstalling unified SSHPLUS session limiter...\e[0m"
- local tmp="/tmp/sshplus-sessionlimiter.py.download"
+ local tmp="/tmp/deinternet-session-limiter.py.download"
  if ! curl -fsSL --connect-timeout 10 --max-time 60 \
    "https://raw.githubusercontent.com/geefores/VPSscript/main/SSHPLUSsocks/Modulos/sessionlimiter.py" -o "$tmp"; then
    echo -e "\e[1;31mWARNING: limiter download failed; it was not activated.\e[0m"
@@ -76,17 +76,18 @@ function InstSessionLimiter(){
    rm -f "$tmp" "${tmp}c"
    return 1
  fi
- install -o root -g root -m 0755 "$tmp" /usr/local/sbin/sshplus-session-limiter.py || return 1
+ install -o root -g root -m 0750 "$tmp" /usr/local/sbin/deinternet-session-limiter.py || return 1
  rm -f "$tmp" "${tmp}c"
- cat > /etc/systemd/system/sshplus-session-limiter.service <<'EOF_LIMITER_SERVICE'
+ cat > /etc/systemd/system/deinternet-session-limiter.service <<'EOF_LIMITER_SERVICE'
 [Unit]
-Description=SSHPLUS unified per-user session limiter (SSH, Dropbear, OpenVPN)
+Description=DEinternet per-user Dropbear and OpenVPN session limiter
 After=network.target systemd-journald.service
 Wants=systemd-journald.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /usr/local/sbin/sshplus-session-limiter.py
+Environment=DROPBEAR_PORT=550
+ExecStart=/usr/bin/python3 /usr/local/sbin/deinternet-session-limiter.py
 Restart=always
 RestartSec=3
 User=root
@@ -100,8 +101,13 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF_LIMITER_SERVICE
  systemctl daemon-reload || return 1
- systemctl enable --now sshplus-session-limiter.service || return 1
- echo -e "\e[1;32mUnified session limiter installed and enabled.\e[0m"
+ # Remove the legacy screen limiter if present; it can kill valid sessions repeatedly.
+ if command -v screen >/dev/null 2>&1; then
+   screen -S droplimiter -X quit >/dev/null 2>&1 || true
+ fi
+ systemctl disable --now sshplus-session-limiter.service >/dev/null 2>&1 || true
+ systemctl enable --now deinternet-session-limiter.service || return 1
+ echo -e "\e[1;32mDEinternet session limiter installed and enabled.\e[0m"
 }
 
 function InstDropbear(){
@@ -493,6 +499,11 @@ function ScriptMessage(){
  }
 
 function UnAll(){
+ systemctl disable --now deinternet-session-limiter.service >/dev/null 2>&1 || true
+ systemctl disable --now sshplus-session-limiter.service >/dev/null 2>&1 || true
+ rm -f /etc/systemd/system/deinternet-session-limiter.service /etc/systemd/system/sshplus-session-limiter.service
+ rm -f /usr/local/sbin/deinternet-session-limiter.py /usr/local/sbin/sshplus-session-limiter.py
+ systemctl daemon-reload >/dev/null 2>&1 || true
  echo -e ""
  echo -e "Removing Dropbear"
  systemctl stop dropbear
