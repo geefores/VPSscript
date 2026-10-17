@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """SSHPLUS unified per-user session limiter for SSH, Dropbear and OpenVPN."""
+import csv
+import io
 import json
 import os
 import pwd
@@ -88,8 +90,14 @@ def active_sshd_sessions():
 
 
 def active_openvpn_sessions():
-    """Return username -> list of management client identifiers, when available."""
+    """Return OpenVPN sessions mapped to a configured username when possible.
+
+    OpenVPN status v2 distinguishes Common Name from authenticated Username.
+    Prefer Username from the header; only use Common Name as a fallback when it
+    exactly matches an account in usuarios.db, avoiding cross-user miscounting.
+    """
     sessions = {}
+    limits = load_limits()
     status = next((p for p in OPENVPN_STATUS if p.is_file()), None)
     if not status:
         return sessions
@@ -97,28 +105,47 @@ def active_openvpn_sessions():
         lines = status.read_text(errors='replace').splitlines()
     except OSError:
         return sessions
+
+    header = None
+    for line in lines:
+        if line.startswith('HEADER,CLIENT_LIST,'):
+            try:
+                header = next(csv.reader([line]))[2:]
+            except (csv.Error, IndexError):
+                header = None
+            break
+
     for line in lines:
         if not (line.startswith('CLIENT_LIST,') or line.startswith('CLIENT_LIST\t')):
             continue
-        delimiter = ',' if line.startswith('CLIENT_LIST,') else '\t'
-        fields = [x.strip() for x in line.split(delimiter)]
-        # OpenVPN status v2: CLIENT_LIST,Common Name,...,Username,Client ID,Peer ID.
-        if len(fields) < 3:
+        try:
+            fields = next(csv.reader([line])) if line.startswith('CLIENT_LIST,') else [x.strip() for x in line.split('\t')]
+        except csv.Error:
             continue
-        user = fields[1]
-        if not user or user.lower() in ('common name', 'username'):
+        if len(fields) < 2:
             continue
+        common_name = fields[1].strip()
+        user = ''
         client_id = ''
-        # In v2 status the client-id is near the end. Use the named header if present.
-        if delimiter == ',':
+        if header:
+            # fields[0] is CLIENT_LIST; header[0] maps to fields[1].
             try:
-                header = next([x.strip() for x in l.split(',')][1:] for l in lines if l.startswith('HEADER,CLIENT_LIST,'))
-                idx = header.index('Client ID')
-                if idx < len(fields):
-                    client_id = fields[idx]
-            except (StopIteration, ValueError):
+                username_index = header.index('Username') + 1
+                if username_index < len(fields):
+                    user = fields[username_index].strip()
+            except ValueError:
                 pass
-        sessions.setdefault(user, []).append(client_id)
+            try:
+                client_id_index = header.index('Client ID') + 1
+                if client_id_index < len(fields):
+                    client_id = fields[client_id_index].strip()
+            except ValueError:
+                pass
+        # Legacy status formats may not include authenticated Username.
+        if not user and common_name in limits:
+            user = common_name
+        if user in limits:
+            sessions.setdefault(user, []).append(client_id)
     return sessions
 
 
