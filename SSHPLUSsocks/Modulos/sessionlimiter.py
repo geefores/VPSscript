@@ -170,13 +170,31 @@ def kill_openvpn_client(client_id, username):
         return False
 
 
-def terminate_dropbear(pid):
-    """Revalidate PID and established socket before terminating a child."""
+def terminate_dropbear(pid, expected_username):
+    """Revalidate child identity, latest successful auth, and established socket."""
     try:
         cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(
             b"\0", b" ").decode(errors="replace")
         if "dropbear" not in cmdline.lower() or " -2 " not in f" {cmdline} ":
             return False
+
+        # Do not signal a recycled PID or a process whose authenticated user
+        # does not match the account currently being limited.
+        journal = run(["journalctl", "-u", "dropbear", "--since", "24 hours ago",
+                       "-o", "cat", "--no-pager"], timeout=12)
+        auth = re.compile(
+            rf"^\[{pid}\].*(?:Password|Pubkey|Public key|Keyboard-interactive) "
+            r"auth succeeded for '([^']+)'", re.IGNORECASE)
+        authenticated_user = None
+        for line in journal.splitlines():
+            match = auth.search(line)
+            if match:
+                authenticated_user = match.group(1)
+        if authenticated_user != expected_username:
+            print(f"WARNING: refusing to signal Dropbear PID {pid}: "
+                  "authenticated username could not be confirmed.", flush=True)
+            return False
+
         sockets = run(["ss", "-Htnp", "state", "established",
                        f"( sport = :{DROPBEAR_PORT} )"])
         pid_pattern = re.compile(rf"pid={pid}(?:,|\))")
@@ -184,6 +202,9 @@ def terminate_dropbear(pid):
                    for line in sockets.splitlines()):
             return False
         os.kill(pid, signal.SIGTERM)
+        run(["logger", "-t", "deinternet-session-limiter", "--",
+             f"Disconnected Dropbear session user={expected_username} pid={pid} "
+             "reason=per-user-session-limit"])
         return True
     except OSError:
         return False
@@ -220,7 +241,7 @@ def check_once():
                     print(f"DRY_RUN: would disconnect Dropbear PID {pid} for {username}",
                           flush=True)
                     excess -= 1
-                elif terminate_dropbear(pid):
+                elif terminate_dropbear(pid, username):
                     print(f"Disconnected Dropbear session user={username} pid={pid}",
                           flush=True)
                     excess -= 1
