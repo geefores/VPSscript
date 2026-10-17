@@ -62,6 +62,48 @@ function InstUpdates(){
  apt clean 2>/dev/null
 }
 
+function InstSessionLimiter(){
+ echo -e "\e[1;37mInstalling unified SSHPLUS session limiter...\e[0m"
+ local tmp="/tmp/sshplus-sessionlimiter.py.download"
+ if ! curl -fsSL --connect-timeout 10 --max-time 60 \
+   "https://raw.githubusercontent.com/geefores/VPSscript/main/SSHPLUSsocks/Modulos/sessionlimiter.py" -o "$tmp"; then
+   echo -e "\e[1;31mWARNING: limiter download failed; it was not activated.\e[0m"
+   rm -f "$tmp"
+   return 1
+ fi
+ if ! /usr/bin/python3 -m py_compile "$tmp"; then
+   echo -e "\e[1;31mWARNING: limiter syntax check failed; it was not activated.\e[0m"
+   rm -f "$tmp" "${tmp}c"
+   return 1
+ fi
+ install -o root -g root -m 0755 "$tmp" /usr/local/sbin/sshplus-session-limiter.py || return 1
+ rm -f "$tmp" "${tmp}c"
+ cat > /etc/systemd/system/sshplus-session-limiter.service <<'EOF_LIMITER_SERVICE'
+[Unit]
+Description=SSHPLUS unified per-user session limiter (SSH, Dropbear, OpenVPN)
+After=network.target systemd-journald.service
+Wants=systemd-journald.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/sshplus-session-limiter.py
+Restart=always
+RestartSec=3
+User=root
+Group=root
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF_LIMITER_SERVICE
+ systemctl daemon-reload || return 1
+ systemctl enable --now sshplus-session-limiter.service || return 1
+ echo -e "\e[1;32mUnified session limiter installed and enabled.\e[0m"
+}
+
 function InstDropbear(){
 
  rm -f /etc/banner
@@ -545,6 +587,7 @@ fi
  InsOpenVPN
  InsAIP
  InstBadVPN
+ InstSessionLimiter
 
  # Configuring Nginx OVPN config download site
  OvpnConfigs
